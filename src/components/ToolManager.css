@@ -1,0 +1,129 @@
+.tool-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 12px;
+    padding: 8px 0;
+}
+
+.tool-card {
+    background: var(--color-bg-secondary);
+    border: 1.5px solid var(--color-border);
+    border-radius: 12px;
+    padding: 12px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.tool-card:hover {
+    border-color: var(--color-accent);
+    transform: translateY(-2px);
+}
+
+.tool-card.active {
+    border-color: var(--color-success);
+    background: rgba(46, 213, 115, 0.05);
+    box-shadow: 0 0 15px rgba(46, 213, 115, 0.1);
+}
+
+.tool-card-icon {
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.tool-card-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tool-card-info {
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+}
+
+.shape-selection-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.shape-item {
+    background: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.7rem;
+    cursor: pointer;
+}
+
+.shape-item:hover {
+    border-color: var(--color-accent);
+    background: rgba(59, 130, 246, 0.05);
+}
+
+.active-tool-badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: var(--color-success);
+    color: white;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    border: 2px solid var(--color-bg-primary);
+}
+
+.tool-edit-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: flex;
+    align-items: flex-end;
+    /* Mobile friendly bottom sheet style */
+}
+
+.tool-edit-sheet {
+    background: var(--color-bg-primary);
+    width: 100%;
+    max-height: 90vh;
+    border-radius: 20px 20px 0 0;
+    padding: 1.5rem;
+    overflow-y: auto;
+    box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.3);
+}
+
+@media (min-width: 768px) {
+    .tool-edit-overlay {
+        align-items: center;
+        justify-content: center;
+    }
+
+    .tool-edit-sheet {
+        max-width: 500px;
+        border-radius: 12px;
+    }
+}

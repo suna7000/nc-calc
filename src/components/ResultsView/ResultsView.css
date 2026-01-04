@@ -1,0 +1,349 @@
+/* ===== Results View ===== */
+.results-view {
+    background: var(--color-bg-card);
+    border: 1px solid var(--color-success);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-bottom: var(--space-4);
+}
+
+.results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-4);
+    background: rgba(16, 185, 129, 0.1);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.results-header h3 {
+    margin: 0;
+    font-size: var(--font-size-base);
+    color: var(--color-success);
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.badge {
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+}
+
+.badge-success {
+    background: var(--color-success);
+    color: white;
+}
+
+
+.btn-sm {
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--font-size-sm);
+}
+
+/* ===== CAD View ===== */
+.cad-view {
+    padding: var(--space-3);
+    background: #0a1929;
+}
+
+.cad-view.interactive {
+    overflow: hidden;
+    user-select: none;
+}
+
+.cad-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+    transform-origin: center center;
+    transition: transform 0.1s ease-out;
+}
+
+/* Zoom Controls */
+.zoom-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-bg-tertiary);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.zoom-controls button {
+    width: 32px;
+    height: 32px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-secondary);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-base);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.zoom-controls button:hover {
+    background: var(--color-accent-primary);
+    border-color: var(--color-accent-primary);
+    color: white;
+}
+
+.zoom-level {
+    min-width: 50px;
+    text-align: center;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+.zoom-hint {
+    margin-left: auto;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
+/* ===== NC Code View ===== */
+.nc-code-view {
+    border-top: 1px solid var(--color-border);
+}
+
+.nc-code-header {
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-bg-tertiary);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.nc-code-title {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    font-weight: 500;
+}
+
+.nc-code-body {
+    padding: var(--space-3) var(--space-4);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    background: #0d1117;
+}
+
+.nc-line {
+    display: flex;
+    gap: var(--space-3);
+    padding: var(--space-1) 0;
+    color: var(--color-text-primary);
+}
+
+.nc-line-num {
+    color: var(--color-text-muted);
+    min-width: 40px;
+}
+
+.nc-command {
+    color: #7dd3fc;
+}
+
+.nc-line.corner-r .nc-command {
+    color: #86efac;
+}
+
+.nc-line.corner-c .nc-command {
+    color: #fcd34d;
+}
+
+/* ===== Coord Table ===== */
+.coord-table {
+    border-top: 1px solid var(--color-border);
+    overflow-x: auto;
+}
+
+.coord-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+}
+
+.coord-table th,
+.coord-table td {
+    padding: var(--space-2) var(--space-3);
+    text-align: left;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.coord-table th {
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+}
+
+.coord-table td.mono {
+    font-family: var(--font-mono);
+    color: var(--color-text-primary);
+}
+
+.coord-table tr:last-child td {
+    border-bottom: none;
+}
+
+.coord-table tr.corner-r td {
+    background: rgba(16, 185, 129, 0.05);
+}
+
+.coord-table tr.corner-c td {
+    background: rgba(245, 158, 11, 0.05);
+}
+
+.coord-table td.highlight {
+    color: #22d3ee;
+    font-weight: 600;
+}
+
+.coord-table td.center {
+    text-align: center;
+}
+
+/* Type Badge */
+.type-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+}
+
+.type-badge.line {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+}
+
+.type-badge.corner-r {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+}
+
+.type-badge.corner-c {
+    background: rgba(245, 158, 11, 0.2);
+    color: #f59e0b;
+}
+
+/* ===== Tool Info Board ===== */
+.tool-info-board {
+    padding: var(--space-3) var(--space-4);
+    background: rgba(59, 130, 246, 0.05);
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: var(--space-4);
+}
+
+.info-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.info-item .label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+}
+
+.info-item .value {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-text-primary);
+}
+
+.info-item .value.highlight {
+    color: #60a5fa;
+    font-weight: 600;
+}
+
+/* ===== Warnings Board ===== */
+.warnings-board {
+    padding: var(--space-3) var(--space-4);
+    background: rgba(245, 158, 11, 0.1);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.warning-item {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+}
+
+.warning-icon {
+    font-size: 1.1rem;
+}
+
+.warning-text {
+    font-size: var(--font-size-sm);
+    color: #fbbf24;
+    line-height: 1.4;
+}
+
+/* ===== Compensated Cells ===== */
+.coord-table th.compensated {
+    color: #a78bfa;
+}
+
+.coord-table td.compensated {
+    color: #c084fc;
+    font-weight: 500;
+    background: rgba(167, 139, 250, 0.03);
+}
+
+/* Advanced Info (Smid) Styles */
+.coord-table th.advanced {
+    color: #f472b6;
+}
+
+.advanced-info-cell {
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+}
+
+.smid-shifts {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px;
+    background: rgba(244, 114, 182, 0.05);
+    border-radius: var(--radius-sm);
+    border-left: 2px solid #f472b6;
+}
+
+.smid-shifts span {
+    color: #f472b6;
+    font-family: var(--font-mono);
+}
+
+.tangent-info {
+    padding: 4px;
+    background: rgba(45, 212, 191, 0.05);
+    border-radius: var(--radius-sm);
+    border-left: 2px solid #2dd4bf;
+    margin-top: 2px;
+}
+
+.tangent-info span {
+    color: #2dd4bf;
+    font-family: var(--font-mono);
+}
