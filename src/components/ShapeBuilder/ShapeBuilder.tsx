@@ -317,6 +317,44 @@ export function ShapeBuilder() {
                         </div>
                     </div>
 
+                    {/* ノーズR補正設定 */}
+                    <h4 style={{ marginTop: '16px' }}>ノーズR補正</h4>
+                    <div className="settings-grid">
+                        <div className="setting-item">
+                            <label>補正モード</label>
+                            <div className="toggle-buttons">
+                                <button
+                                    className={`toggle-btn ${!machineSettings.noseRCompensation.enabled ? 'active' : ''}`}
+                                    onClick={() => setMachineSettings({
+                                        ...machineSettings,
+                                        noseRCompensation: { ...machineSettings.noseRCompensation, enabled: false }
+                                    })}
+                                >
+                                    補正なし
+                                </button>
+                                <button
+                                    className={`toggle-btn ${machineSettings.noseRCompensation.enabled ? 'active' : ''}`}
+                                    onClick={() => setMachineSettings({
+                                        ...machineSettings,
+                                        noseRCompensation: { ...machineSettings.noseRCompensation, enabled: true }
+                                    })}
+                                >
+                                    G41/G42補正
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    {machineSettings.noseRCompensation.enabled && (
+                        <div className="settings-info" style={{ marginTop: '8px', color: 'var(--color-success)' }}>
+                            ✓ 補正有効: 工具R{machineSettings.toolLibrary.find(t => t.id === machineSettings.activeToolId)?.noseRadius || 0}mm で座標を補正します
+                        </div>
+                    )}
+                    {!machineSettings.noseRCompensation.enabled && (
+                        <div className="settings-info" style={{ marginTop: '8px' }}>
+                            補正なし: ワーク形状の座標をそのまま出力します
+                        </div>
+                    )}
+
                     <ToolSettings
                         machineSettings={machineSettings}
                         onUpdate={(updates) => setMachineSettings({ ...machineSettings, ...updates })}
