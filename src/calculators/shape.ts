@@ -503,11 +503,30 @@ function calculateAngle(x1: number, z1: number, x2: number, z2: number): number 
     return round3(Math.atan(dx / dz) * (180 / Math.PI))
 }
 
-function determineGCode(isLeft: boolean, type: 'kaku-r' | 'sumi-r', settings: MachineSettings): string {
-    let ccw = type === 'kaku-r' ? isLeft : !isLeft
-    if (settings.toolPost === 'rear') ccw = !ccw
-    if (settings.cuttingDirection === '+z') ccw = !ccw
-    return ccw ? 'G03' : 'G02'
+/**
+ * G02/G03判定
+ * 
+ * NC旋盤の基本ルール（前刃物台、外径、-Z方向切削）:
+ * - 工具が進行方向から見て「左に曲がる」円弧 → G02（時計回り）
+ * - 工具が進行方向から見て「右に曲がる」円弧 → G03（反時計回り）
+ * 
+ * isLeftTurn: 外積 (u1 × u2) > 0 なら「左に曲がる」
+ */
+function determineGCode(isLeftTurn: boolean, _type: 'kaku-r' | 'sumi-r', settings: MachineSettings): string {
+    // 基本判定: 前刃物台・外径・-Z方向で isLeftTurn → G02
+    let isG02 = isLeftTurn
+
+    // 後刃物台の場合は反転
+    if (settings.toolPost === 'rear') {
+        isG02 = !isG02
+    }
+
+    // 切削方向が+Zの場合も反転
+    if (settings.cuttingDirection === '+z') {
+        isG02 = !isG02
+    }
+
+    return isG02 ? 'G02' : 'G03'
 }
 
 function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | null {

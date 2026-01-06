@@ -37,18 +37,42 @@ export function ShapeBuilder() {
 
     // 初期化時にlocalStorageから読み込む
     useEffect(() => {
-        const saved = localStorage.getItem('nc_calc_settings')
-        if (saved) {
-            const parsed = JSON.parse(saved)
-            if (parsed.machine) setMachineSettings(parsed.machine)
-            if (parsed.coordinates) setCoordSettings(parsed.coordinates)
+        const loadSettings = () => {
+            const saved = localStorage.getItem('nc_calc_settings')
+            if (saved) {
+                const parsed = JSON.parse(saved)
+                if (parsed.machine) setMachineSettings(parsed.machine)
+                if (parsed.coordinates) setCoordSettings(parsed.coordinates)
+            }
         }
+
+        loadSettings()
 
         const savedShape = localStorage.getItem('nc_calc_last_shape')
         if (savedShape) {
             setShape(JSON.parse(savedShape))
         }
         setIsInitialized(true)
+
+        // 他のタブで設定が変更された場合に同期
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'nc_calc_settings' && e.newValue) {
+                const parsed = JSON.parse(e.newValue)
+                if (parsed.machine) setMachineSettings(parsed.machine)
+                if (parsed.coordinates) setCoordSettings(parsed.coordinates)
+            }
+        }
+
+        // タブがフォーカスされたときに設定を再読み込み
+        const handleFocus = () => loadSettings()
+
+        window.addEventListener('storage', handleStorageChange)
+        window.addEventListener('focus', handleFocus)
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange)
+            window.removeEventListener('focus', handleFocus)
+        }
     }, [])
 
     // 形状が変更されたら保存
