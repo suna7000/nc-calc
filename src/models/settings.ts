@@ -72,6 +72,8 @@ export interface MachineSettings {
         enabled: boolean
         offsetNumber: number
         compensationDirection: CompensationDirection
+        // 補正計算方式: 'geometric'=幾何学的アプローチ, 'smid'=Peter Smid方式
+        method: 'geometric' | 'smid'
     }
 }
 
@@ -157,7 +159,8 @@ export const defaultMachineSettings: MachineSettings = {
     noseRCompensation: {
         enabled: false,
         offsetNumber: 1,
-        compensationDirection: 'auto'
+        compensationDirection: 'auto',
+        method: 'geometric'
     }
 }
 
@@ -177,7 +180,8 @@ export const machinePresets: Record<string, MachineSettings> = {
         noseRCompensation: {
             enabled: false,
             offsetNumber: 1,
-            compensationDirection: 'auto'
+            compensationDirection: 'auto',
+            method: 'geometric'
         }
     },
     // 後刃物台旋盤
@@ -189,7 +193,8 @@ export const machinePresets: Record<string, MachineSettings> = {
         noseRCompensation: {
             enabled: false,
             offsetNumber: 1,
-            compensationDirection: 'auto'
+            compensationDirection: 'auto',
+            method: 'geometric'
         }
     },
     // MAZATROL（後刃物台が多い）
@@ -201,7 +206,8 @@ export const machinePresets: Record<string, MachineSettings> = {
         noseRCompensation: {
             enabled: false,
             offsetNumber: 1,
-            compensationDirection: 'auto'
+            compensationDirection: 'auto',
+            method: 'geometric'
         }
     }
 }

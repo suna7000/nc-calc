@@ -77,6 +77,13 @@ fz = R(1 - tan(θ/2))
 これは上記の幾何学的計算を三角関数で表現したもの。  
 「1 + tan()」か「1 - tan()」かは、接点が仮想刃先点のどちら側にあるかで決まる。
 
+### 参考文献
+
+- **Peter Smid "CNC Programming Handbook"** (Chapter 26, 27)
+  - 正弦定理を用いた二直線の交点算出
+  - テーパー角度に基づく手計算用補正シフト量
+  - 実装: `src/calculators/noseRCompensation.ts`
+
 ## コーディング規約
 
 - TypeScript厳格モード

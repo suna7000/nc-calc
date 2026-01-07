@@ -6,6 +6,7 @@
 import type { Shape, Point, CornerCalculation } from '../models/shape'
 import type { MachineSettings } from '../models/settings'
 import { defaultMachineSettings } from '../models/settings'
+import { calculateSmidManualShifts } from './noseRCompensation'
 
 // 計算結果
 export interface ShapeCalculationResult {
@@ -280,18 +281,34 @@ export function calculateShape(
         // 直線セグメントにノーズR補正（fx, fz）を適用
         if (noseR > 0) {
             const isInternal = activeTool.type === 'internal'
+            const method = machineSettings.noseRCompensation.method || 'geometric'
+
             results.forEach(seg => {
                 if (seg.type === 'line' && seg.angle !== undefined) {
-                    // チップ番号（仮想刃先点番号）を取得
-                    const toolTipNumber = activeTool.toolTipNumber || 3
+                    let fx: number, fz: number
 
-                    const { fx, fz } = calculateLineNoseROffset(
-                        seg.angle,
-                        noseR,
-                        toolTipNumber,
-                        isInternal,
-                        machineSettings.cuttingDirection
-                    )
+                    if (method === 'smid') {
+                        // Peter Smid方式（Chapter 27）
+                        const result = calculateSmidManualShifts(seg.angle, noseR)
+                        fx = result.deltaX
+                        fz = result.deltaZ
+                        // 内径加工の場合は反転
+                        if (isInternal) fx = -fx
+                        if (machineSettings.cuttingDirection === '+z') fz = -fz
+                    } else {
+                        // 幾何学的アプローチ（チップ番号対応）
+                        const toolTipNumber = activeTool.toolTipNumber || 3
+                        const result = calculateLineNoseROffset(
+                            seg.angle,
+                            noseR,
+                            toolTipNumber,
+                            isInternal,
+                            machineSettings.cuttingDirection
+                        )
+                        fx = result.fx
+                        fz = result.fz
+                    }
+
                     // 補正量をセグメントに保存
                     seg.advancedInfo = {
                         ...seg.advancedInfo,

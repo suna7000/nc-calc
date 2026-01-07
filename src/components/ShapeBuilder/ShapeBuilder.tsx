@@ -345,8 +345,35 @@ export function ShapeBuilder() {
                         </div>
                     </div>
                     {machineSettings.noseRCompensation.enabled && (
-                        <div className="settings-info" style={{ marginTop: '8px', color: 'var(--color-success)' }}>
-                            ✓ 補正有効: 工具R{machineSettings.toolLibrary.find(t => t.id === machineSettings.activeToolId)?.noseRadius || 0}mm で座標を補正します
+                        <div style={{ marginTop: '8px' }}>
+                            <div className="settings-info" style={{ color: 'var(--color-success)', marginBottom: '8px' }}>
+                                ✓ 補正有効: 工具R{machineSettings.toolLibrary.find(t => t.id === machineSettings.activeToolId)?.noseRadius || 0}mm で座標を補正します
+                            </div>
+                            <div className="setting-item">
+                                <span className="setting-label">計算方式</span>
+                                <div className="toggle-buttons">
+                                    <button
+                                        className={`toggle-btn ${machineSettings.noseRCompensation.method === 'geometric' ? 'active' : ''}`}
+                                        onClick={() => setMachineSettings({
+                                            ...machineSettings,
+                                            noseRCompensation: { ...machineSettings.noseRCompensation, method: 'geometric' }
+                                        })}
+                                        title="仮想刃先点と接点の差を計算（チップ番号対応）"
+                                    >
+                                        幾何学的
+                                    </button>
+                                    <button
+                                        className={`toggle-btn ${machineSettings.noseRCompensation.method === 'smid' ? 'active' : ''}`}
+                                        onClick={() => setMachineSettings({
+                                            ...machineSettings,
+                                            noseRCompensation: { ...machineSettings.noseRCompensation, method: 'smid' }
+                                        })}
+                                        title="Peter Smid CNC Programming Handbook Chapter 27"
+                                    >
+                                        Smid方式
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
                     {!machineSettings.noseRCompensation.enabled && (
