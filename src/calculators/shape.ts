@@ -276,10 +276,34 @@ export function calculateShape(
         if (activeTool.leadAngle !== undefined || activeTool.backAngle !== undefined) {
             checkInterference(results, activeTool, machineSettings, warnings)
         }
-        // R値補正法はcalculateCorner内で直接処理するため、従来の交点法は不要
-        // if (machineSettings.noseRCompensation.enabled) {
-        //     applyNoseRCompensation(results, machineSettings)
-        // }
+
+        // 直線セグメントにノーズR補正（fx, fz）を適用
+        if (noseR > 0) {
+            const isInternal = activeTool.type === 'internal'
+            results.forEach(seg => {
+                if (seg.type === 'line' && seg.angle !== undefined) {
+                    const { fx, fz } = calculateLineNoseROffset(
+                        seg.angle,
+                        noseR,
+                        isInternal,
+                        machineSettings.cuttingDirection
+                    )
+                    // 補正量をセグメントに保存
+                    seg.advancedInfo = {
+                        ...seg.advancedInfo,
+                        manualShiftX: fx,  // X補正量（直径）
+                        manualShiftZ: fz   // Z補正量
+                    }
+                    // 補正後座標を計算
+                    seg.compensated = {
+                        startX: round3(seg.startX + fx),
+                        startZ: round3(seg.startZ + fz),
+                        endX: round3(seg.endX + fx),
+                        endZ: round3(seg.endZ + fz)
+                    }
+                }
+            })
+        }
     }
 
     return { segments: results, warnings }
@@ -513,6 +537,61 @@ function calculateAngle(x1: number, z1: number, x2: number, z2: number): number 
     const dx = Math.abs(x2 - x1) / 2, dz = Math.abs(z2 - z1)
     if (dz === 0) return 90
     return round3(Math.atan(dx / dz) * (180 / Math.PI))
+}
+
+/**
+ * 直線セグメントのノーズR補正計算
+ * 
+ * 計算式（ユーザー提供）:
+ *   fx = 2R(1 - tan(φ/2))  ←直径値
+ *   fz = R(1 - tan(θ/2))
+ *   ただし φ = 90 - θ
+ * 
+ * @param angleDeg テーパー角度（度）。0°=Z軸に平行、90°=X軸に平行
+ * @param noseR ノーズR
+ * @param isInternal 内径加工かどうか
+ * @param cuttingDir 切削方向
+ * @returns {fx, fz} 補正量（fx:直径、fz:単位）
+ */
+function calculateLineNoseROffset(
+    angleDeg: number,
+    noseR: number,
+    isInternal: boolean = false,
+    cuttingDir: '+z' | '-z' = '-z'
+): { fx: number, fz: number } {
+    if (noseR <= 0 || angleDeg === undefined) {
+        return { fx: 0, fz: 0 }
+    }
+
+    const theta = angleDeg * (Math.PI / 180)  // ラジアン変換
+    const phi = (Math.PI / 2) - theta  // φ = 90° - θ
+
+    // 標準パターン（外径・-Z方向切削）
+    // fx = 2R(1 - tan(φ/2))
+    // fz = R(1 - tan(θ/2))
+    let fx = 2 * noseR * (1 - Math.tan(phi / 2))
+    let fz = noseR * (1 - Math.tan(theta / 2))
+
+    // 角度が90度の場合（端面加工）のtan発散を防ぐ
+    if (angleDeg >= 89.9) {
+        fx = 0
+        fz = noseR * (1 - 1)  // tan(45°) = 1
+    }
+    if (angleDeg <= 0.1) {
+        fx = 2 * noseR * (1 - 1)  // tan(45°) = 1
+        fz = 0
+    }
+
+    // 内径加工や逆方向の場合は符号を調整
+    // (e), (f)パターン: 1 + tan() になる
+    if (isInternal) {
+        fx = -fx
+    }
+    if (cuttingDir === '+z') {
+        fz = -fz
+    }
+
+    return { fx: round3(fx), fz: round3(fz) }
 }
 
 /**
