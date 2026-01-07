@@ -53,6 +53,7 @@ export interface SegmentResult {
         distToVertex?: number   // 仮想交点（カド）からの戻り量 (L)
         tangentX?: number       // 理論接点X (直径)
         tangentZ?: number       // 理論接点Z
+        originalRadius?: number // 補正前のR値
     }
 }
 
@@ -73,6 +74,15 @@ export function calculateShape(
     let currentX = shape.points[0].x
     let currentZ = shape.points[0].z
     let i = 0
+
+    // ノーズR補正値を取得（補正が有効な場合のみ）
+    let noseR = 0
+    if (machineSettings.noseRCompensation.enabled) {
+        const activeTool = machineSettings.toolLibrary.find(t => t.id === machineSettings.activeToolId)
+        if (activeTool && activeTool.noseRadius > 0) {
+            noseR = activeTool.noseRadius
+        }
+    }
 
     while (i < shape.points.length - 1) {
         const nextPoint = shape.points[i + 1]
@@ -135,7 +145,7 @@ export function calculateShape(
             }
 
             const currentPointObj = { x: currentX, z: currentZ }
-            const cornerCalc = calculateCorner(currentPointObj as Point, nextPoint, afterNextPoint)
+            const cornerCalc = calculateCorner(currentPointObj as Point, nextPoint, afterNextPoint, noseR)
 
             if (cornerCalc) {
                 results.push({
@@ -206,11 +216,12 @@ export function calculateShape(
                             k: cornerCalc.k,
                             centerX: cornerCalc.centerX,
                             centerZ: cornerCalc.centerZ,
-                            radius: nextPoint.corner.size,
+                            radius: cornerCalc.adjustedRadius || nextPoint.corner.size,
                             gCode: determineGCode(!!cornerCalc.isLeftTurn, nextPoint.corner.type as 'kaku-r' | 'sumi-r', machineSettings),
                             sweep: sweep as 0 | 1,
                             advancedInfo: {
-                                distToVertex: cornerCalc.distToVertex
+                                distToVertex: cornerCalc.distToVertex,
+                                originalRadius: cornerCalc.originalRadius
                             }
                         })
                         currentX = cornerCalc.exitX
@@ -265,9 +276,10 @@ export function calculateShape(
         if (activeTool.leadAngle !== undefined || activeTool.backAngle !== undefined) {
             checkInterference(results, activeTool, machineSettings, warnings)
         }
-        if (machineSettings.noseRCompensation.enabled) {
-            applyNoseRCompensation(results, machineSettings)
-        }
+        // R値補正法はcalculateCorner内で直接処理するため、従来の交点法は不要
+        // if (machineSettings.noseRCompensation.enabled) {
+        //     applyNoseRCompensation(results, machineSettings)
+        // }
     }
 
     return { segments: results, warnings }
@@ -297,7 +309,7 @@ function checkInterference(results: SegmentResult[], tool: any, settings: Machin
  * 2. 隣接するオフセット形状同士の交点（工具中心点）を算出。
  * 3. 工具中心点から仮想刃先点へのベクトルを逆算し、プログラム座標を特定。
  */
-function applyNoseRCompensation(segments: SegmentResult[], settings: MachineSettings): void {
+export function applyNoseRCompensationLegacy(segments: SegmentResult[], settings: MachineSettings): void {
     const tool = settings.toolLibrary.find(t => t.id === settings.activeToolId)
     if (!tool || tool.noseRadius <= 0) return
 
@@ -529,9 +541,31 @@ function determineGCode(isLeftTurn: boolean, _type: 'kaku-r' | 'sumi-r', setting
     return isG02 ? 'G02' : 'G03'
 }
 
-function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | null {
-    const size = p2.corner.size
-    if (size <= 0) return null
+/**
+ * コーナー計算（ノーズR補正対応）
+ * @param noseR ノーズR補正値（0の場合は補正なし）
+ * @returns 補正後の接点座標、補正後Rなど
+ */
+function calculateCorner(p1: Point, p2: Point, p3: Point, noseR: number = 0): CornerCalculation | null {
+    const originalSize = p2.corner.size
+    if (originalSize <= 0) return null
+
+    // ノーズR補正を適用
+    // 角R（凸角）: 補正後R = 元R + ノーズR
+    // 隅R（凹角）: 補正後R = 元R - ノーズR
+    let adjustedSize = originalSize
+    if (noseR > 0) {
+        if (p2.corner.type === 'kaku-r') {
+            adjustedSize = originalSize + noseR
+        } else if (p2.corner.type === 'sumi-r') {
+            adjustedSize = originalSize - noseR
+            if (adjustedSize <= 0) {
+                // 補正後Rが0以下になる場合は元のRで計算（警告は別途）
+                adjustedSize = originalSize
+            }
+        }
+    }
+
     const v1x = (p1.x - p2.x) / 2, v1z = p1.z - p2.z
     const v2x = (p3.x - p2.x) / 2, v2z = p3.z - p2.z
     const l1 = Math.sqrt(v1x * v1x + v1z * v1z), l2 = Math.sqrt(v2x * v2x + v2z * v2z)
@@ -540,23 +574,29 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
 
     if (p2.corner.type === 'kaku-c') {
         return {
-            entryX: round3((p2.x / 2 + u1x * size) * 2), entryZ: round3(p2.z + u1z * size),
-            exitX: round3((p2.x / 2 + u2x * size) * 2), exitZ: round3(p2.z + u2z * size)
+            entryX: round3((p2.x / 2 + u1x * originalSize) * 2), entryZ: round3(p2.z + u1z * originalSize),
+            exitX: round3((p2.x / 2 + u2x * originalSize) * 2), exitZ: round3(p2.z + u2z * originalSize)
         }
     }
     const bX = u1x + u2x, bZ = u1z + u2z, bL = Math.sqrt(bX * bX + bZ * bZ)
     if (bL === 0) return null
     const half = Math.acos(Math.max(-1, Math.min(1, u1x * u2x + u1z * u2z))) / 2
     const cSign = p2.corner.type === 'kaku-r' ? 1 : -1
-    const cDist = size / Math.sin(half), tDist = size / Math.tan(half)
+
+    // 補正後Rで接点距離と円弧中心を計算
+    const cDist = adjustedSize / Math.sin(half), tDist = adjustedSize / Math.tan(half)
     const cX = p2.x / 2 + (bX / bL) * cDist * cSign, cZ = p2.z + (bZ / bL) * cDist * cSign
     const eX = p2.x / 2 + u1x * tDist, eZ = p2.z + u1z * tDist
     const xX = p2.x / 2 + u2x * tDist, xZ = p2.z + u2z * tDist
+
     return {
         entryX: round3(eX * 2), entryZ: round3(eZ), exitX: round3(xX * 2), exitZ: round3(xZ),
         i: round3(cX - eX), k: round3(cZ - eZ), centerX: round3(cX * 2), centerZ: round3(cZ),
         isLeftTurn: (u1x * u2z - u1z * u2x) > 0,
-        distToVertex: round3(tDist)
+        distToVertex: round3(tDist),
+        // 補正後R値を追加
+        adjustedRadius: adjustedSize,
+        originalRadius: originalSize
     }
 }
 

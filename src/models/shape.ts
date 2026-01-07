@@ -56,6 +56,9 @@ export interface CornerCalculation {
     centerZ?: number
     isLeftTurn?: boolean
     distToVertex?: number // 仮想交点（カド）からの戻り量
+    // ノーズR補正後のR値
+    adjustedRadius?: number
+    originalRadius?: number
 }
 
 // 形状全体
