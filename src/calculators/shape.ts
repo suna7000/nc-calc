@@ -561,17 +561,15 @@ function calculateAngle(x1: number, z1: number, x2: number, z2: number): number 
 }
 
 /**
- * 直線セグメントのノーズR補正計算（幾何学的アプローチ）
+ * 直線セグメントのノーズR補正計算（教科書の計算式）
  * 
- * 本質: 仮想刃先点と実際の切削点（ノーズR上の接点）のずれを補正する
- * 
- * 1. 仮想刃先点: チップ番号によって決まる固定位置
- * 2. 実際の接点: セグメントの角度（切削面の法線方向）によって変化
- * 3. 補正量 = 接点位置 - 仮想刃先位置
+ * 計算式:
+ *   fx = 2R(1 - tan(φ/2))   ただし φ = 90° - θ
+ *   fz = R(1 - tan(θ/2))
  * 
  * @param angleDeg テーパー角度（度）。0°=Z軸に平行、90°=X軸に平行
  * @param noseR ノーズR
- * @param toolTipNumber 仮想刃先点番号（1～8）
+ * @param _toolTipNumber 仮想刃先点番号（現在は未使用）
  * @param isInternal 内径加工かどうか
  * @param cuttingDir 切削方向
  * @returns {fx, fz} 補正量（fx:直径値、fz:単位値）
@@ -579,7 +577,7 @@ function calculateAngle(x1: number, z1: number, x2: number, z2: number): number 
 function calculateLineNoseROffset(
     angleDeg: number,
     noseR: number,
-    toolTipNumber: number = 3,
+    _toolTipNumber: number = 3,
     isInternal: boolean = false,
     cuttingDir: '+z' | '-z' = '-z'
 ): { fx: number, fz: number } {
@@ -589,40 +587,30 @@ function calculateLineNoseROffset(
 
     const R = noseR
     const theta = angleDeg * (Math.PI / 180)  // テーパー角度（ラジアン）
+    const phi = (Math.PI / 2) - theta         // φ = 90° - θ
 
-    // 1. 仮想刃先点の位置（工具中心からの相対位置、半径値）
-    // チップ番号による定義（Fanuc/JIS標準）
-    let virtualTipX = 0, virtualTipZ = 0
-    switch (toolTipNumber) {
-        case 1: virtualTipX = 0; virtualTipZ = -R; break  // Z-方向
-        case 2: virtualTipX = R; virtualTipZ = -R; break  // 内径標準（X+, Z-）
-        case 3: virtualTipX = R; virtualTipZ = 0; break  // 外径標準（X+）
-        case 4: virtualTipX = R; virtualTipZ = R; break  // X+, Z+
-        case 5: virtualTipX = 0; virtualTipZ = R; break  // Z+方向
-        case 6: virtualTipX = -R; virtualTipZ = R; break  // X-, Z+
-        case 7: virtualTipX = -R; virtualTipZ = 0; break  // X-方向
-        case 8: virtualTipX = -R; virtualTipZ = -R; break  // X-, Z-
-        default: virtualTipX = R; virtualTipZ = 0; break   // デフォルト: チップ番号3
+    // 教科書の計算式（tan半角形式）
+    // fx = 2R(1 - tan(φ/2))
+    // fz = R(1 - tan(θ/2))
+    let fx = 2 * R * (1 - Math.tan(phi / 2))
+    let fz = R * (1 - Math.tan(theta / 2))
+
+    // θ=90°近傍でのtan発散を防ぐ
+    if (angleDeg >= 89.9) {
+        fx = 2 * R  // θ=90° → φ=0° → tan(0)=0 → 2R(1-0) = 2R
+        fz = 0
+    }
+    if (angleDeg <= 0.1) {
+        fx = 0  // θ=0° → φ=90° → tan(45°)=1 → 2R(1-1) = 0
+        fz = R  // θ=0° → tan(0)=0 → R(1-0) = R
     }
 
-    // 2. 実際の接点の位置（工具中心からの相対位置、半径値）
-    // テーパー面の法線方向にRだけ離れた点
-    // 法線方向: テーパー角度θに対して、法線は(sin(θ), -cos(θ))方向
-    // ただし、外径加工で-Z方向に進む場合を基準
-    // 接点 = 工具中心 + R × 法線方向
-    const contactX = R * Math.sin(theta)   // X方向（半径値）
-    const contactZ = -R * Math.cos(theta)  // Z方向（-Z側に接触）
-
-    // 3. 補正量 = 接点位置 - 仮想刃先位置
-    let fx = (contactX - virtualTipX) * 2  // 直径値に変換
-    let fz = contactZ - virtualTipZ
-
-    // 内径加工の場合は接点位置が反対側
+    // 内径加工の場合はX方向が反転
     if (isInternal) {
         fx = -fx
     }
 
-    // +Z方向切削の場合はZ方向の接点が反転
+    // +Z方向切削の場合はZ方向が反転
     if (cuttingDir === '+z') {
         fz = -fz
     }
