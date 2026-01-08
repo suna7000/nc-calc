@@ -172,3 +172,27 @@ describe('ノーズR補正計算', () => {
         })
     })
 })
+
+describe('実際のテストケース', () => {
+    it('θ=26.57°（atan(10/20)）, R=0.4mmの計算', () => {
+        const theta = Math.atan(10/20) * (180 / Math.PI)  // 26.565°
+        console.log(`テーパー角度 θ = ${theta}°`)
+        
+        const smid = calculateSmidManualShifts(theta, 0.4)
+        const textbook = calculateTextbookFormula(theta, 0.4)
+        const geometric = calculateGeometricOffset(theta, 0.4, 3)
+        
+        console.log('Smid方式:', smid)
+        console.log('教科書の式:', textbook)
+        console.log('幾何学的:', geometric)
+        
+        // 期待値（手計算で検証が必要）
+        // θ = 26.565°, φ = 63.435°
+        // tan(θ/2) = tan(13.28°) = 0.236
+        // tan(φ/2) = tan(31.72°) = 0.617
+        // fx = 2R(1 - tan(φ/2)) = 0.8 * (1 - 0.617) = 0.306
+        // fz = R(1 - tan(θ/2)) = 0.4 * (1 - 0.236) = 0.306
+        expect(textbook.fx).toBeCloseTo(0.306, 2)
+        expect(textbook.fz).toBeCloseTo(0.306, 2)
+    })
+})

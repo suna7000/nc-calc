@@ -452,12 +452,19 @@ export function ResultsView({
 }
 
 function formatNCLine(seg: SegmentResult): string {
+    // 補正座標があれば優先、なければ元座標を使用
+    const endX = seg.compensated?.endX ?? seg.endX
+    const endZ = seg.compensated?.endZ ?? seg.endZ
+    const i = seg.compensated?.i ?? seg.i
+    const k = seg.compensated?.k ?? seg.k
+    const gCode = seg.gCode || (seg.type === 'corner-r' ? 'G03' : 'G01')
+
     if (seg.type === 'corner-r') {
-        return `${seg.gCode || 'G03'} X${seg.endX.toFixed(3)} Z${seg.endZ.toFixed(3)} I${seg.i?.toFixed(3)} K${seg.k?.toFixed(3)}`
+        return `${gCode} X${endX.toFixed(3)} Z${endZ.toFixed(3)} I${i?.toFixed(3)} K${k?.toFixed(3)}`
     } else if (seg.type === 'corner-c') {
-        return `G01 X${seg.endX.toFixed(3)} Z${seg.endZ.toFixed(3)}`
+        return `G01 X${endX.toFixed(3)} Z${endZ.toFixed(3)}`
     }
-    return `G01 X${seg.endX.toFixed(3)} Z${seg.endZ.toFixed(3)}`
+    return `G01 X${endX.toFixed(3)} Z${endZ.toFixed(3)}`
 }
 
 function getTypeLabel(type: string): string {
