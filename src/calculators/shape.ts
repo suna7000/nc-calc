@@ -316,11 +316,13 @@ export function calculateShape(
                         manualShiftZ: fz   // Z補正量
                     }
                     // 補正後座標を計算
+                    // X: 補正量を加算（ノーズRの分だけ外側へ）
+                    // Z: 補正量を減算（-Z方向の加工で仮想刃先より実際の接点が-Z側にあるため）
                     seg.compensated = {
                         startX: round3(seg.startX + fx),
-                        startZ: round3(seg.startZ + fz),
+                        startZ: round3(seg.startZ - fz),
                         endX: round3(seg.endX + fx),
-                        endZ: round3(seg.endZ + fz)
+                        endZ: round3(seg.endZ - fz)
                     }
                 }
             })
