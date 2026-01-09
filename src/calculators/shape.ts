@@ -296,12 +296,14 @@ export function calculateShape(
                         if (isInternal) fx = -fx
                         if (machineSettings.cuttingDirection === '+z') fz = -fz
                     } else {
-                        // 幾何学的アプローチ（チップ番号対応）
-                        const toolTipNumber = activeTool.toolTipNumber || 3
+                        // 幾何学的アプローチ
+                        // テーパーの向きを判定：Xが増加=上り=背刃、Xが減少=下り=前刃
+                        // 外径加工・-Z方向の場合、セグメントのendX > startXなら上りテーパー
+                        const isRising = seg.endX > seg.startX
                         const result = calculateLineNoseROffset(
                             seg.angle,
                             noseR,
-                            toolTipNumber,
+                            isRising,
                             isInternal,
                             machineSettings.cuttingDirection
                         )
@@ -565,13 +567,17 @@ function calculateAngle(x1: number, z1: number, x2: number, z2: number): number 
 /**
  * 直線セグメントのノーズR補正計算（教科書の計算式）
  * 
+ * テーパーの向きにより刃先使い分け:
+ *   - 下りテーパー（Xが小さくなる）→ 前刃 → 1 - tan()
+ *   - 上りテーパー（Xが大きくなる）→ 背刃 → 1 + tan()
+ * 
  * 計算式:
- *   fx = 2R(1 - tan(φ/2))   ただし φ = 90° - θ
- *   fz = R(1 - tan(θ/2))
+ *   前刃: fx = 2R(1 - tan(φ/2)), fz = R(1 - tan(θ/2))
+ *   背刃: fx = 2R(1 + tan(φ/2)), fz = R(1 + tan(θ/2))
  * 
  * @param angleDeg テーパー角度（度）。0°=Z軸に平行、90°=X軸に平行
  * @param noseR ノーズR
- * @param _toolTipNumber 仮想刃先点番号（現在は未使用）
+ * @param isRising 上りテーパー（背刃使用）かどうか
  * @param isInternal 内径加工かどうか
  * @param cuttingDir 切削方向
  * @returns {fx, fz} 補正量（fx:直径値、fz:単位値）
@@ -579,7 +585,7 @@ function calculateAngle(x1: number, z1: number, x2: number, z2: number): number 
 function calculateLineNoseROffset(
     angleDeg: number,
     noseR: number,
-    _toolTipNumber: number = 3,
+    isRising: boolean = false,
     isInternal: boolean = false,
     cuttingDir: '+z' | '-z' = '-z'
 ): { fx: number, fz: number } {
@@ -591,20 +597,26 @@ function calculateLineNoseROffset(
     const theta = angleDeg * (Math.PI / 180)  // テーパー角度（ラジアン）
     const phi = (Math.PI / 2) - theta         // φ = 90° - θ
 
-    // 教科書の計算式（tan半角形式）
-    // fx = 2R(1 - tan(φ/2))
-    // fz = R(1 - tan(θ/2))
-    let fx = 2 * R * (1 - Math.tan(phi / 2))
-    let fz = R * (1 - Math.tan(theta / 2))
+    let fx: number, fz: number
+
+    if (isRising) {
+        // 背刃: 1 + tan()
+        fx = 2 * R * (1 + Math.tan(phi / 2))
+        fz = R * (1 + Math.tan(theta / 2))
+    } else {
+        // 前刃: 1 - tan()
+        fx = 2 * R * (1 - Math.tan(phi / 2))
+        fz = R * (1 - Math.tan(theta / 2))
+    }
 
     // θ=90°近傍でのtan発散を防ぐ
     if (angleDeg >= 89.9) {
-        fx = 2 * R  // θ=90° → φ=0° → tan(0)=0 → 2R(1-0) = 2R
+        fx = isRising ? 2 * R : 2 * R  // θ=90° → 端面加工
         fz = 0
     }
     if (angleDeg <= 0.1) {
-        fx = 0  // θ=0° → φ=90° → tan(45°)=1 → 2R(1-1) = 0
-        fz = R  // θ=0° → tan(0)=0 → R(1-0) = R
+        fx = 0  // θ=0° → Z軸に平行
+        fz = R  // Z補正はR
     }
 
     // 内径加工の場合はX方向が反転
