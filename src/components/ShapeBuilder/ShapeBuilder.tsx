@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { Shape, CornerType, CornerTreatment } from '../../models/shape'
+import type { Shape, CornerType, CornerTreatment, GrooveInsert } from '../../models/shape'
 import { createPoint, createEmptyShape, noCorner } from '../../models/shape'
 import { calculateShape, formatResults } from '../../calculators/shape'
 import { ShapePreview } from '../preview/ShapePreview'
@@ -34,6 +34,15 @@ export function ShapeBuilder() {
 
     const [lastAddedIndex, setLastAddedIndex] = useState<number | null>(null)
     const [isInitialized, setIsInitialized] = useState(false)
+
+    // 溝挿入モード
+    const [showGrooveForm, setShowGrooveForm] = useState(false)
+    const [grooveWidth, setGrooveWidth] = useState('')
+    const [grooveDepth, setGrooveDepth] = useState('')
+    const [grooveBottomLeftR, setGrooveBottomLeftR] = useState('')
+    const [grooveBottomRightR, setGrooveBottomRightR] = useState('')
+    const [grooveLeftAngle, setGrooveLeftAngle] = useState('90')
+    const [grooveRightAngle, setGrooveRightAngle] = useState('90')
 
     // 初期化時にlocalStorageから読み込む
     useEffect(() => {
@@ -211,6 +220,44 @@ export function ShapeBuilder() {
 
         setShape({ points: shape.points.slice(0, -1) })
         setShowResults(false)
+    }
+
+    // 溝を挿入（最後の点に溝情報を付加）
+    const addGroove = () => {
+        if (shape.points.length === 0) return
+
+        const w = parseFloat(grooveWidth)
+        const d = parseFloat(grooveDepth)
+        if (isNaN(w) || isNaN(d) || w <= 0 || d <= 0) return
+
+        const groove: GrooveInsert = {
+            width: w,
+            depth: d,
+            bottomLeftR: parseFloat(grooveBottomLeftR) || undefined,
+            bottomRightR: parseFloat(grooveBottomRightR) || undefined,
+            leftAngle: parseFloat(grooveLeftAngle) || 90,
+            rightAngle: parseFloat(grooveRightAngle) || 90
+        }
+
+        setShape(prev => {
+            const newPoints = [...prev.points]
+            const lastIdx = newPoints.length - 1
+            newPoints[lastIdx] = { ...newPoints[lastIdx], groove }
+            return { ...prev, points: newPoints }
+        })
+
+        // 入力をリセット
+        setShowGrooveForm(false)
+        setGrooveWidth('')
+        setGrooveDepth('')
+        setGrooveBottomLeftR('')
+        setGrooveBottomRightR('')
+        setGrooveLeftAngle('90')
+        setGrooveRightAngle('90')
+        setShowResults(false)
+
+        setLastAddedIndex(shape.points.length)
+        setTimeout(() => setLastAddedIndex(null), 2000)
     }
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -567,11 +614,93 @@ export function ShapeBuilder() {
                         ➕ 点を追加
                     </button>
                     {shape.points.length > 0 && (
-                        <button className="btn btn-secondary" onClick={removeLastPoint}>
-                            ↩ 戻す
-                        </button>
+                        <>
+                            <button className="btn btn-secondary" onClick={removeLastPoint}>
+                                ↩ 戻す
+                            </button>
+                            <button
+                                className={`btn ${showGrooveForm ? 'btn-primary' : 'btn-ghost'}`}
+                                onClick={() => setShowGrooveForm(!showGrooveForm)}
+                            >
+                                🔧 溝を挿入
+                            </button>
+                        </>
                     )}
                 </div>
+
+                {/* 溝挿入フォーム */}
+                {showGrooveForm && shape.points.length > 0 && (
+                    <div className="groove-insert-form" style={{ marginTop: '1rem', padding: '1rem', background: 'var(--color-surface)', borderRadius: '8px', border: '1px solid var(--color-accent)' }}>
+                        <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-accent)' }}>🔧 溝を挿入（点{shape.points.length}の後）</h4>
+                        <div className="input-row">
+                            <div className="input-group">
+                                <label>溝幅</label>
+                                <input
+                                    type="number"
+                                    className="step-input small"
+                                    value={grooveWidth}
+                                    onChange={(e) => setGrooveWidth(e.target.value)}
+                                    placeholder="10.0"
+                                />
+                            </div>
+                            <div className="input-group">
+                                <label>溝深さ（片側）</label>
+                                <input
+                                    type="number"
+                                    className="step-input small"
+                                    value={grooveDepth}
+                                    onChange={(e) => setGrooveDepth(e.target.value)}
+                                    placeholder="5.0"
+                                />
+                            </div>
+                        </div>
+                        <div className="input-row">
+                            <div className="input-group">
+                                <label>左底R</label>
+                                <input
+                                    type="number"
+                                    className="step-input small"
+                                    value={grooveBottomLeftR}
+                                    onChange={(e) => setGrooveBottomLeftR(e.target.value)}
+                                    placeholder="0.5"
+                                />
+                            </div>
+                            <div className="input-group">
+                                <label>右底R</label>
+                                <input
+                                    type="number"
+                                    className="step-input small"
+                                    value={grooveBottomRightR}
+                                    onChange={(e) => setGrooveBottomRightR(e.target.value)}
+                                    placeholder="0.5"
+                                />
+                            </div>
+                        </div>
+                        <div className="input-row">
+                            <div className="input-group">
+                                <label>左壁角度</label>
+                                <input
+                                    type="number"
+                                    className="step-input small"
+                                    value={grooveLeftAngle}
+                                    onChange={(e) => setGrooveLeftAngle(e.target.value)}
+                                />
+                            </div>
+                            <div className="input-group">
+                                <label>右壁角度</label>
+                                <input
+                                    type="number"
+                                    className="step-input small"
+                                    value={grooveRightAngle}
+                                    onChange={(e) => setGrooveRightAngle(e.target.value)}
+                                />
+                            </div>
+                        </div>
+                        <button className="btn btn-primary" onClick={addGroove} style={{ marginTop: '0.5rem' }}>
+                            ✓ 溝を確定
+                        </button>
+                    </div>
+                )}
 
                 {/* 追加成功フィードバック */}
                 {lastAddedIndex !== null && (
@@ -594,6 +723,11 @@ export function ShapeBuilder() {
                                     {point.corner.type === 'sumi-r' ? `隅R${point.corner.size}`
                                         : point.corner.type === 'kaku-r' ? `角R${point.corner.size}`
                                             : `角C${point.corner.size}`}
+                                </span>
+                            )}
+                            {point.groove && (
+                                <span className="corner-badge" style={{ background: 'var(--color-accent)', color: 'var(--color-bg)' }}>
+                                    🔧 溝W{point.groove.width}×D{point.groove.depth}
                                 </span>
                             )}
                         </div>

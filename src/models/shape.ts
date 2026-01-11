@@ -10,6 +10,16 @@
 // kaku-c: 角C（外角の面取り）
 export type CornerType = 'none' | 'sumi-r' | 'kaku-r' | 'kaku-c'
 
+// 溝挿入情報（この点の後に溝を入れる）
+export interface GrooveInsert {
+    width: number           // 溝幅
+    depth: number           // 溝深さ（半径値、片側分）
+    bottomLeftR?: number    // 左底R
+    bottomRightR?: number   // 右底R
+    leftAngle?: number      // 左壁角度（90 = 垂直、省略時90）
+    rightAngle?: number     // 右壁角度（90 = 垂直、省略時90）
+}
+
 // 隅処理情報
 export interface CornerTreatment {
     type: CornerType
@@ -29,6 +39,8 @@ export interface Point {
     z: number
     // この点に到達する際の隅処理（MAZATROL の F corner に相当）
     corner: CornerTreatment
+    // この点の後に溝を挿入する場合
+    groove?: GrooveInsert
 }
 
 // 要素の計算結果

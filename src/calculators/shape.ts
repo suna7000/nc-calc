@@ -3,7 +3,7 @@
  * 隅処理（R/C）を考慮した座標計算
  */
 
-import type { Shape, Point, CornerCalculation } from '../models/shape'
+import type { Shape, Point, CornerCalculation, GrooveInsert } from '../models/shape'
 import type { MachineSettings } from '../models/settings'
 import { defaultMachineSettings } from '../models/settings'
 import {
@@ -62,6 +62,66 @@ export interface SegmentResult {
         tangentZ?: number       // 理論接点Z
         originalRadius?: number // 補正前のR値
     }
+}
+
+/**
+ * 溝を点群（セグメント列）に展開する
+ * 現在位置(X,Z)から溝を掘って現在位置に戻るセグメントを生成
+ */
+function expandGrooveToSegments(
+    startX: number,     // 開始X（直径値）
+    startZ: number,     // 開始Z
+    groove: GrooveInsert,
+    results: SegmentResult[]
+): { endX: number; endZ: number } {
+    const depth = groove.depth
+    const width = groove.width
+    const bottomX = startX - depth * 2  // 底面の直径
+    const leftAngle = groove.leftAngle || 90
+    const rightAngle = groove.rightAngle || 90
+
+    // 左壁の角度に基づくZシフト
+    const leftZShift = leftAngle === 90 ? 0 : depth * Math.tan((90 - leftAngle) * Math.PI / 180)
+    // 右壁の角度に基づくZシフト
+    const rightZShift = rightAngle === 90 ? 0 : depth * Math.tan((90 - rightAngle) * Math.PI / 180)
+
+    const bottomLeftZ = startZ - leftZShift
+    const bottomRightZ = startZ - width + rightZShift
+
+    // 1. 左壁：開始点 → 底左
+    results.push({
+        index: results.length + 1,
+        type: 'line',
+        startX: startX,
+        startZ: startZ,
+        endX: bottomX,
+        endZ: bottomLeftZ,
+        angle: leftAngle === 90 ? 90 : leftAngle
+    })
+
+    // 2. 底面：底左 → 底右
+    results.push({
+        index: results.length + 1,
+        type: 'line',
+        startX: bottomX,
+        startZ: bottomLeftZ,
+        endX: bottomX,
+        endZ: bottomRightZ,
+        angle: 0  // 底面は水平
+    })
+
+    // 3. 右壁：底右 → 出口（同じX位置に戻る）
+    results.push({
+        index: results.length + 1,
+        type: 'line',
+        startX: bottomX,
+        startZ: bottomRightZ,
+        endX: startX,
+        endZ: startZ - width,
+        angle: rightAngle === 90 ? 90 : rightAngle
+    })
+
+    return { endX: startX, endZ: startZ - width }
 }
 
 /**
@@ -278,6 +338,14 @@ export function calculateShape(
             currentX = nextPoint.x
             currentZ = nextPoint.z
             i += 1
+        }
+
+        // この点に溝がある場合、溝を展開
+        const currentPoint = shape.points[i]
+        if (currentPoint && currentPoint.groove) {
+            const grooveEnd = expandGrooveToSegments(currentX, currentZ, currentPoint.groove, results)
+            currentX = grooveEnd.endX
+            currentZ = grooveEnd.endZ
         }
     }
 
