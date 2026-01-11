@@ -739,25 +739,95 @@ function calculateDualArcCorner(p1: Point, p2: Point, p3: Point, r1: number, r2:
 function calculateAdjacentCorners(p1: Point, p2: Point, p3: Point, p4: Point): any {
     const R1 = p2.corner.size, R2 = p3.corner.size
     if (R1 <= 0 || R2 <= 0) return null
-    const v_inX = (p2.x - p1.x) / 2, v_inZ = p2.z - p1.z
-    const v_stX = (p3.x - p2.x) / 2, v_stZ = p3.z - p2.z
-    const v_outX = (p4.x - p3.x) / 2, v_outZ = p4.z - p3.z
-    const lIn = Math.sqrt(v_inX * v_inX + v_inZ * v_inZ), lSt = Math.sqrt(v_stX * v_stX + v_stZ * v_stZ), lOut = Math.sqrt(v_outX * v_outX + v_outZ * v_outZ)
-    if (lIn === 0 || lOut === 0) return null
-    const uInX = v_inX / lIn, uInZ = v_inZ / lIn, uStX = lSt > 0 ? v_stX / lSt : 0, uStZ = lSt > 0 ? v_stZ / lSt : 0, uOutX = v_outX / lOut, uOutZ = v_outZ / lOut
-    const oa = R1 - lSt, ag_sq = R1 * R1 - oa * oa
-    if (ag_sq < 0) return null
-    const oe = R1 + R2, ofV = R1 - lSt + R2, ef_sq = oe * oe - ofV * ofV
-    if (ef_sq < 0) return null
-    const th = Math.atan2(ofV, Math.sqrt(ef_sq)), sTh = Math.sin(th), cTh = Math.cos(th)
-    const oX = p2.x / 2 + uStX * R1, oZ = p2.z + uStZ * R1
-    const aX = p2.x / 2 - uInX * Math.sqrt(ag_sq), aZ = p2.z - uInZ * Math.sqrt(ag_sq)
-    const bX = oX - uStX * R1 * sTh, bZ = aZ + uInZ * R1 * cTh
-    const eX = bX - uStX * R2, eZ = bZ, cX = p3.x / 2, cZ = aZ + uInZ * Math.sqrt(ef_sq)
-    return {
-        arc1: { entryX: round3(aX * 2), entryZ: round3(aZ), exitX: round3(bX * 2), exitZ: round3(bZ), centerX: round3(oX * 2), centerZ: round3(oZ), i: round3(oX - aX), k: round3(oZ - aZ), radius: R1, isLeftTurn: (uInX * uStZ - uInZ * uStX) > 0 },
-        arc2: { entryX: round3(bX * 2), entryZ: round3(bZ), exitX: round3(cX * 2), exitZ: round3(cZ), centerX: round3(eX * 2), centerZ: round3(eZ), i: round3(eX - bX), k: round3(eZ - bZ), radius: R2, isLeftTurn: (uStX * uOutZ - uStZ * uOutX) > 0 }
+
+    // ベクトル定義
+    const v1 = { x: (p2.x - p1.x) / 2, z: p2.z - p1.z }
+    const v2 = { x: (p3.x - p2.x) / 2, z: p3.z - p2.z }
+    const v3 = { x: (p4.x - p3.x) / 2, z: p4.z - p3.z }
+
+    const l1 = Math.sqrt(v1.x * v1.x + v1.z * v1.z)
+    const l2 = Math.sqrt(v2.x * v2.x + v2.z * v2.z)
+    const l3 = Math.sqrt(v3.x * v3.x + v3.z * v3.z)
+    if (l1 === 0 || l2 === 0 || l3 === 0) return null
+
+    const u1 = { x: v1.x / l1, z: v1.z / l1 }
+    const u2 = { x: v2.x / l2, z: v2.z / l2 }
+    const u3 = { x: v3.x / l3, z: v3.z / l3 }
+
+    // 各角の回転方向 (外積)
+    const turn1 = u1.x * u2.z - u1.z * u2.x // > 0 は左
+    const turn2 = u2.x * u3.z - u2.z * u3.x
+
+    const isL1 = turn1 > 0
+    const isL2 = turn2 > 0
+
+    // S字接続か同方向か
+    const isScurve = (isL1 !== isL2)
+    const targetDist = isScurve ? (R1 + R2) : Math.abs(R1 - R2)
+
+    // ここでは単純に並行移動を想定した S字接続（Mazatrol方式）を優先
+    // 特に p1-p2 と p3-p4 が平行な「段」のケース
+    const isParallel = Math.abs(u1.x * u3.z - u1.z * u3.x) < 0.01
+
+    if (isParallel && isScurve) {
+        // オフセット方向の法線ベクトル (u1を90度左回転: (-u1.z, u1.x))
+        const n1 = { x: -u1.z, z: u1.x }
+        const n3 = { x: -u3.z, z: u3.x }
+
+        // 回転方向に応じた符号 (Leftなら+, Rightなら-)
+        const s1 = isL1 ? 1 : -1
+        const s3 = isL2 ? 1 : -1
+
+        // 中心軌跡 (X座標は固定)
+        const x1 = p2.x / 2 + n1.x * s1 * R1
+        const x3 = p3.x / 2 + n3.x * s3 * R2
+
+        const h = Math.abs(x3 - x1)
+        // 半径の合計が段差より大きい場合、S字接続を適用
+        if (h < targetDist) {
+            const dz_total = Math.sqrt(targetDist * targetDist - h * h)
+
+            // Zの配分 (半径比)
+            const dz1 = dz_total * (R1 / targetDist)
+            const dz2 = dz_total * (R2 / targetDist)
+
+            // 移動方向を決定 (u1, u3 の逆に逃がす)
+            const c1 = { x: x1, z: p2.z - u1.z * dz1 }
+            const c2 = { x: x3, z: p3.z + u3.z * dz2 }
+
+            // 接点 M (Arc1-Arc2)
+            const midX = c1.x + (c2.x - c1.x) * (R1 / targetDist)
+            const midZ = c1.z + (c2.z - c1.z) * (R1 / targetDist)
+
+            // 開始点 A (Line1-Arc1) - 中心から元の法線方向に R だけ戻る
+            const enX = c1.x - n1.x * s1 * R1
+            const enZ = c1.z - n1.z * s1 * R1
+
+            // 終了点 B (Arc2-Line3)
+            const exX = c2.x - n3.x * s3 * R2
+            const exZ = c2.z - n3.z * s3 * R2
+
+            return {
+                arc1: {
+                    entryX: round3(enX * 2), entryZ: round3(enZ),
+                    exitX: round3(midX * 2), exitZ: round3(midZ),
+                    centerX: round3(c1.x * 2), centerZ: round3(c1.z),
+                    i: round3(c1.x - enX), k: round3(c1.z - enZ),
+                    radius: R1, isLeftTurn: isL1
+                },
+                arc2: {
+                    entryX: round3(midX * 2), entryZ: round3(midZ),
+                    exitX: round3(exX * 2), exitZ: round3(exZ),
+                    centerX: round3(c2.x * 2), centerZ: round3(c2.z),
+                    i: round3(c2.x - midX), k: round3(c2.z - midZ),
+                    radius: R2, isLeftTurn: isL2
+                }
+            }
+        }
     }
+
+    // それ以外は個別計算に任せる
+    return null
 }
 
 export function formatResults(result: ShapeCalculationResult): string[] {
