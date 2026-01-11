@@ -44,6 +44,9 @@ export function ShapeBuilder() {
     const [grooveLeftAngle, setGrooveLeftAngle] = useState('90')
     const [grooveRightAngle, setGrooveRightAngle] = useState('90')
 
+    // 点編集モード
+    const [editingPointIndex, setEditingPointIndex] = useState<number | null>(null)
+
     // 初期化時にlocalStorageから読み込む
     useEffect(() => {
         const loadSettings = () => {
@@ -159,6 +162,77 @@ export function ShapeBuilder() {
 
         // フィードバックを2秒後にクリア
         setTimeout(() => setLastAddedIndex(null), 2000)
+    }
+
+    // 点の編集を開始（クリックした点の値をフォームに読み込む）
+    const startEditPoint = (index: number) => {
+        const point = shape.points[index]
+        if (!point) return
+
+        setEditingPointIndex(index)
+        setInputX(point.x.toString())
+        setInputZ(point.z.toString())
+        setCornerType(point.corner.type)
+        setCornerSize(point.corner.size > 0 ? point.corner.size.toString() : '')
+        setHasSecondArc(!!point.corner.secondArc)
+        if (point.corner.secondArc) {
+            setSecondArcType(point.corner.secondArc.type)
+            setSecondArcSize(point.corner.secondArc.size.toString())
+        }
+        setShowGrooveForm(false)
+        setShowResults(false)
+    }
+
+    // 点を更新
+    const updatePoint = () => {
+        if (editingPointIndex === null) return
+
+        const xStr = inputX.trim()
+        const zStr = inputZ.trim()
+        if (xStr === '' || zStr === '') return
+
+        const x = parseFloat(xStr)
+        const z = parseFloat(zStr)
+        if (isNaN(x) || isNaN(z)) return
+
+        let corner: CornerTreatment = noCorner()
+        const size = parseFloat(cornerSize)
+        if (!isNaN(size) && size > 0) {
+            if (cornerType === 'sumi-r') {
+                corner = { type: 'sumi-r', size }
+            } else if (cornerType === 'kaku-r') {
+                corner = { type: 'kaku-r', size }
+            } else if (cornerType === 'kaku-c') {
+                corner = { type: 'kaku-c', size }
+            }
+            if (hasSecondArc && (cornerType === 'sumi-r' || cornerType === 'kaku-r')) {
+                const secondSize = parseFloat(secondArcSize)
+                if (!isNaN(secondSize) && secondSize > 0) {
+                    corner.secondArc = { type: secondArcType as 'sumi-r' | 'kaku-r', size: secondSize }
+                }
+            }
+        }
+
+        setShape(prev => {
+            const newPoints = [...prev.points]
+            const oldGroove = newPoints[editingPointIndex].groove
+            newPoints[editingPointIndex] = { ...newPoints[editingPointIndex], x, z, corner, groove: oldGroove }
+            return { ...prev, points: newPoints }
+        })
+
+        cancelEdit()
+    }
+
+    // 編集をキャンセル
+    const cancelEdit = () => {
+        setEditingPointIndex(null)
+        setInputX('')
+        setInputZ('')
+        setCornerType('none')
+        setCornerSize('')
+        setHasSecondArc(false)
+        setSecondArcType('kaku-r')
+        setSecondArcSize('')
     }
 
     const calculateFromAngle = (type: 'x' | 'z') => {
@@ -610,20 +684,33 @@ export function ShapeBuilder() {
 
                 {/* アクションボタン */}
                 <div className="action-buttons">
-                    <button className="btn btn-primary" onClick={addPoint}>
-                        ➕ 点を追加
-                    </button>
-                    {shape.points.length > 0 && (
+                    {editingPointIndex !== null ? (
                         <>
-                            <button className="btn btn-secondary" onClick={removeLastPoint}>
-                                ↩ 戻す
+                            <button className="btn btn-primary" onClick={updatePoint}>
+                                ✓ 点{editingPointIndex + 1}を更新
                             </button>
-                            <button
-                                className={`btn ${showGrooveForm ? 'btn-primary' : 'btn-ghost'}`}
-                                onClick={() => setShowGrooveForm(!showGrooveForm)}
-                            >
-                                🔧 溝を挿入
+                            <button className="btn btn-secondary" onClick={cancelEdit}>
+                                ✕ キャンセル
                             </button>
+                        </>
+                    ) : (
+                        <>
+                            <button className="btn btn-primary" onClick={addPoint}>
+                                ➕ 点を追加
+                            </button>
+                            {shape.points.length > 0 && (
+                                <>
+                                    <button className="btn btn-secondary" onClick={removeLastPoint}>
+                                        ↩ 戻す
+                                    </button>
+                                    <button
+                                        className={`btn ${showGrooveForm ? 'btn-primary' : 'btn-ghost'}`}
+                                        onClick={() => setShowGrooveForm(!showGrooveForm)}
+                                    >
+                                        🔧 溝を挿入
+                                    </button>
+                                </>
+                            )}
                         </>
                     )}
                 </div>
@@ -715,12 +802,17 @@ export function ShapeBuilder() {
                 <div className="points-list">
                     <h3>入力済みの点</h3>
                     {shape.points.map((point, index) => (
-                        <div key={point.id} className="point-item">
+                        <div
+                            key={point.id}
+                            className={`point-item ${editingPointIndex === index ? 'editing' : ''}`}
+                            onClick={() => startEditPoint(index)}
+                            style={{ cursor: 'pointer' }}
+                        >
                             <span className="point-number">{index + 1}</span>
                             <span className="point-coords">X{point.x} Z{point.z}</span>
                             {point.corner.type !== 'none' && (
                                 <span className="corner-badge">
-                                    {point.corner.type === 'sumi-r' ? `隅R${point.corner.size}`
+                                    {point.corner.type === 'sumi-r' ? `雅R${point.corner.size}`
                                         : point.corner.type === 'kaku-r' ? `角R${point.corner.size}`
                                             : `角C${point.corner.size}`}
                                 </span>
@@ -728,6 +820,11 @@ export function ShapeBuilder() {
                             {point.groove && (
                                 <span className="corner-badge" style={{ background: 'var(--color-accent)', color: 'var(--color-bg)' }}>
                                     🔧 溝W{point.groove.width}×D{point.groove.depth}
+                                </span>
+                            )}
+                            {editingPointIndex === index && (
+                                <span className="corner-badge" style={{ background: 'var(--color-warning)', color: 'var(--color-bg)' }}>
+                                    編集中
                                 </span>
                             )}
                         </div>
