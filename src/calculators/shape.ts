@@ -674,8 +674,6 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
     const originalSize = p2.corner.size
     if (originalSize <= 0) return null
 
-    let adjustedSize = originalSize
-
     const v1x = (p1.x - p2.x) / 2, v1z = p1.z - p2.z
     const v2x = (p3.x - p2.x) / 2, v2z = p3.z - p2.z
     const l1 = Math.sqrt(v1x * v1x + v1z * v1z), l2 = Math.sqrt(v2x * v2x + v2z * v2z)
@@ -683,14 +681,22 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
     const u1x = v1x / l1, u1z = v1z / l1, u2x = v2x / l2, u2z = v2z / l2
 
     if (p2.corner.type === 'kaku-c') {
+        const adjustedC = Math.min(originalSize, l1 * 0.99, l2 * 0.99)
         return {
-            entryX: round3((p2.x / 2 + u1x * originalSize) * 2), entryZ: round3(p2.z + u1z * originalSize),
-            exitX: round3((p2.x / 2 + u2x * originalSize) * 2), exitZ: round3(p2.z + u2z * originalSize)
+            entryX: round3((p2.x / 2 + u1x * adjustedC) * 2), entryZ: round3(p2.z + u1z * adjustedC),
+            exitX: round3((p2.x / 2 + u2x * adjustedC) * 2), exitZ: round3(p2.z + u2z * adjustedC)
         }
     }
+
     const bX = u1x + u2x, bZ = u1z + u2z, bL = Math.sqrt(bX * bX + bZ * bZ)
     if (bL === 0) return null
     const half = Math.acos(Math.max(-1, Math.min(1, u1x * u2x + u1z * u2z))) / 2
+
+    // Rの自動調整 (Limit check)
+    const maxTDist = Math.min(l1, l2) * 0.99
+    const maxR = maxTDist * Math.tan(half)
+    const adjustedSize = Math.min(originalSize, maxR)
+
     const cDist = adjustedSize / Math.sin(half), tDist = adjustedSize / Math.tan(half)
     const cX = p2.x / 2 + (bX / bL) * cDist, cZ = p2.z + (bZ / bL) * cDist
     const eX = p2.x / 2 + u1x * tDist, eZ = p2.z + u1z * tDist
@@ -701,8 +707,7 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
         i: round3(cX - eX), k: round3(cZ - eZ), centerX: round3(cX * 2), centerZ: round3(cZ),
         isLeftTurn: (u1x * u2z - u1z * u2x) > 0,
         distToVertex: round3(tDist),
-        // 補正後R値を追加
-        adjustedRadius: adjustedSize,
+        adjustedRadius: round3(adjustedSize),
         originalRadius: originalSize
     }
 }
