@@ -7,17 +7,32 @@ interface GrooveCalculatorProps {
     onBack: () => void
 }
 
-type GrooveShapeType = 'rectangular' | 'corner-r' | 'full-r' | 'arc-bottom'
+type GrooveShapeType = 'rectangular' | 'corner-r' | 'full-r' | 'arc-bottom' | 'advanced'
 
 export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
     // 入力フォーム
     const [grooveCount, setGrooveCount] = useState<'single' | 'multiple'>('single')
     const [grooveShape, setGrooveShape] = useState<GrooveShapeType>('rectangular')
     const [diameter, setDiameter] = useState('')
+    const [endDiameter, setEndDiameter] = useState('')
     const [width, setWidth] = useState('')
     const [depth, setDepth] = useState('')
     const [startZ, setStartZ] = useState('')
     const [cornerR, setCornerR] = useState('')
+
+    // 高度な設定
+    const [leftAngle, setLeftAngle] = useState('90')
+    const [rightAngle, setRightAngle] = useState('90')
+    const [bottomLeftR, setBottomLeftR] = useState('')
+    const [bottomRightR, setBottomRightR] = useState('')
+    const [showAdvanced, setShowAdvanced] = useState(false)
+
+    // 角処理
+    const [topLeftType, setTopLeftType] = useState<'none' | 'chamfer' | 'round'>('none')
+    const [topLeftSize, setTopLeftSize] = useState('')
+    const [topRightType, setTopRightType] = useState<'none' | 'chamfer' | 'round'>('none')
+    const [topRightSize, setTopRightSize] = useState('')
+
     // 複数溝用
     const [count, setCount] = useState('')
     const [pitch, setPitch] = useState('')
@@ -38,18 +53,20 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
     // 入力値が変更されたら自動計算
     useEffect(() => {
         const d = parseFloat(diameter)
+        const ed = endDiameter !== '' ? parseFloat(endDiameter) : undefined
         const w = parseFloat(width)
         const dp = parseFloat(depth)
-        const sz = parseFloat(startZ)
+        const sz = parseFloat(startZ) || 0 // 空の場合は0.0をデフォルトに
         const cr = parseFloat(cornerR) || 0
         const ar = parseFloat(arcBottomR) || 0
 
-        if (isNaN(d) || isNaN(w) || isNaN(sz)) {
-            setResult(null)
-            return
-        }
+        const la = parseFloat(leftAngle) || 90
+        const ra = parseFloat(rightAngle) || 90
+        const blr = bottomLeftR !== '' ? parseFloat(bottomLeftR) : undefined
+        const brr = bottomRightR !== '' ? parseFloat(bottomRightR) : undefined
 
-        if (d <= 0 || w <= 0) {
+        // 必須項目チェック（直径と幅が未入力なら計算しない）
+        if (isNaN(d) || isNaN(w) || d <= 0 || w <= 0) {
             setResult(null)
             return
         }
@@ -80,24 +97,33 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
         const res = calculateGroove({
             type: grooveCount,
             diameter: d,
+            endDiameter: ed,
             width: w,
             depth: effectiveDepth,
             startZ: sz,
             count: grooveCount === 'multiple' ? parseInt(count) : undefined,
             pitch: grooveCount === 'multiple' ? parseFloat(pitch) : undefined,
-            cornerR: grooveShape === 'corner-r' ? cr : 0,
+            cornerR: (grooveShape === 'corner-r' && !blr && !brr) ? cr : 0,
+            bottomLeftR: blr,
+            bottomRightR: brr,
+            leftAngle: la,
+            rightAngle: ra,
+            topLeftCorner: topLeftType !== 'none' ? { type: topLeftType, size: parseFloat(topLeftSize) || 0 } : undefined,
+            topRightCorner: topRightType !== 'none' ? { type: topRightType, size: parseFloat(topRightSize) || 0 } : undefined,
             fullR: isFullR,
             arcBottomR: grooveShape === 'arc-bottom' ? ar : 0,
             toolWidth: isGroovingTool ? activeTool.width : undefined,
             noseRadius: isGroovingTool ? activeTool.noseRadius : 0,
+            toolTipNumber: isGroovingTool ? activeTool.virtualTip : 3,
             referencePoint: isGroovingTool ? activeTool.referencePoint : undefined
         })
 
         setResult(res)
-    }, [diameter, width, depth, startZ, cornerR, count, pitch, grooveCount, grooveShape, machineSettings])
+    }, [diameter, endDiameter, width, depth, startZ, cornerR, count, pitch, grooveCount, grooveShape, machineSettings, leftAngle, rightAngle, bottomLeftR, bottomRightR, topLeftType, topLeftSize, topRightType, topRightSize])
 
     const handleClear = () => {
         setDiameter('')
+        setEndDiameter('')
         setWidth('')
         setDepth('')
         setStartZ('')
@@ -105,6 +131,14 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
         setCount('')
         setPitch('')
         setArcBottomR('')
+        setLeftAngle('90')
+        setRightAngle('90')
+        setBottomLeftR('')
+        setBottomRightR('')
+        setTopLeftType('none')
+        setTopLeftSize('')
+        setTopRightType('none')
+        setTopRightSize('')
         setResult(null)
     }
 
@@ -113,9 +147,16 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
         const lines: string[] = []
         result.grooves.forEach((g, i) => {
             lines.push(`; 溝${g.index}`)
-            lines.push(`N${(i + 1) * 100} G00 X${(g.entryX + 2).toFixed(3)} Z${g.entryZ.toFixed(3)}`)
+            lines.push(`N${(i + 1) * 100} G00 X${(g.entryX + 5).toFixed(3)} Z${g.entryZ.toFixed(3)}`)
 
-            if (g.fullRArc) {
+            if (g.advancedSegments) {
+                // 高度な形状の場合、すべてのセグメントの終点を G01 で出力
+                g.advancedSegments.forEach((seg: any, sIdx: number) => {
+                    const x = seg.compensated?.endX ?? seg.endX
+                    const z = seg.compensated?.endZ ?? seg.endZ
+                    lines.push(`N${(i + 1) * 100 + (sIdx + 1) * 10} G01 X${x.toFixed(3)} Z${z.toFixed(3)} F0.1`)
+                })
+            } else if (g.fullRArc) {
                 // 完全Rまたは指定R底
                 lines.push(`N${(i + 1) * 100 + 10} ${g.fullRArc.gCode} X${g.fullRArc.endX.toFixed(3)} Z${g.fullRArc.endZ.toFixed(3)} I${g.fullRArc.i.toFixed(3)} K${g.fullRArc.k.toFixed(3)} F0.1`)
             } else if (g.cornerR) {
@@ -129,7 +170,7 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
                 lines.push(`N${(i + 1) * 100 + 10} G01 X${g.bottomX.toFixed(3)} F0.1`)
                 lines.push(`N${(i + 1) * 100 + 20} G01 Z${g.exitZ.toFixed(3)}`)
             }
-            lines.push(`N${(i + 1) * 100 + 50} G01 X${(g.entryX + 2).toFixed(3)}`)
+            lines.push(`N${(i + 1) * 100 + 90} G01 X${(g.entryX + 5).toFixed(3)}`)
         })
         navigator.clipboard.writeText(lines.join('\n'))
     }
@@ -139,9 +180,6 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
         if (grooveShape === 'full-r') {
             const w = parseFloat(width)
             return isNaN(w) ? '—' : (w / 2).toFixed(3)
-        }
-        if (grooveShape === 'arc-bottom') {
-            return depth || '—'
         }
         return depth || '—'
     }
@@ -188,9 +226,8 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
                     </div>
                 </div>
 
-                {/* 溝形状選択 */}
                 <div className="corner-section">
-                    <label>溝形状</label>
+                    <label>基本形状</label>
                     <div className="segment-type-buttons">
                         <button
                             className={`type-btn ${grooveShape === 'rectangular' ? 'active' : ''}`}
@@ -214,36 +251,31 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
                             className={`type-btn ${grooveShape === 'arc-bottom' ? 'active' : ''}`}
                             onClick={() => setGrooveShape('arc-bottom')}
                         >
-                            ⚾ 指定R底
+                            ⚾ 円弧底
                         </button>
                     </div>
-                    {grooveShape === 'full-r' && (
-                        <div className="input-hint" style={{ marginTop: '0.5rem', color: 'var(--color-accent-secondary)' }}>
-                            完全R形状: 深さ = 溝幅/2 として半円形の溝を加工
-                        </div>
-                    )}
                 </div>
 
-                {/* 基本パラメータ */}
+                {/* パラメータ入力 */}
                 <div className="input-row">
                     <div className="input-group">
-                        <label>加工径（直径）</label>
+                        <label>加工径（開始）</label>
                         <input
                             type="number"
                             className="step-input small"
                             value={diameter}
                             onChange={(e) => setDiameter(e.target.value)}
-                            placeholder="50.0"
+                            placeholder="100.0"
                         />
                     </div>
                     <div className="input-group">
-                        <label>開始Z位置</label>
+                        <label>加工径（終了）</label>
                         <input
                             type="number"
                             className="step-input small"
-                            value={startZ}
-                            onChange={(e) => setStartZ(e.target.value)}
-                            placeholder="-10.0"
+                            value={endDiameter}
+                            onChange={(e) => setEndDiameter(e.target.value)}
+                            placeholder="100.0"
                         />
                     </div>
                 </div>
@@ -256,18 +288,26 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
                             className="step-input small"
                             value={width}
                             onChange={(e) => setWidth(e.target.value)}
-                            placeholder="5.0"
+                            placeholder="10.0"
                         />
                     </div>
                     <div className="input-group">
-                        <label>溝深さ（片側）{grooveShape === 'full-r' && ' [自動]'}</label>
+                        <label>開始Z位置</label>
+                        <input
+                            type="number"
+                            className="step-input small"
+                            value={startZ}
+                            onChange={(e) => setStartZ(e.target.value)}
+                            placeholder="0.0"
+                        />
+                    </div>
+                </div>
+
+                <div className="input-row">
+                    <div className="input-group">
+                        <label>溝深さ（片側）</label>
                         {grooveShape === 'full-r' ? (
-                            <div className="step-input small" style={{
-                                background: 'var(--color-bg-tertiary)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                color: 'var(--color-text-secondary)'
-                            }}>
+                            <div className="step-input small readonly">
                                 {getCalculatedDepth()}
                             </div>
                         ) : (
@@ -276,71 +316,125 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
                                 className="step-input small"
                                 value={depth}
                                 onChange={(e) => setDepth(e.target.value)}
-                                placeholder="3.0"
+                                placeholder="5.0"
                             />
                         )}
                     </div>
-                </div>
-
-                <div className="input-row" style={{ marginTop: '-0.5rem', marginBottom: '0.5rem' }}>
-                    <div className="input-group">
-                        <div className="quick-buttons">
-                            <button className="q-btn" onClick={() => setWidth('2.0')}>2.0</button>
-                            <button className="q-btn" onClick={() => setWidth('3.0')}>3.0</button>
-                            <button className="q-btn" onClick={() => setWidth('4.0')}>4.0</button>
-                            <button className="q-btn" onClick={() => setWidth('5.0')}>5.0</button>
-                        </div>
-                    </div>
-                    <div className="input-group">
-                        <div className="quick-buttons">
-                            <button className="q-btn" onClick={() => setDepth('1.0')}>1.0</button>
-                            <button className="q-btn" onClick={() => setDepth('2.0')}>2.0</button>
-                            <button className="q-btn" onClick={() => setDepth('3.0')}>3.0</button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* 指定R底 - 指定R底形状のときのみ表示 */}
-                {grooveShape === 'arc-bottom' && (
-                    <div className="corner-section">
-                        <label>指定R（円弧底）</label>
-                        <div className="extra-input">
-                            <input
-                                type="number"
-                                className="step-input small"
-                                value={arcBottomR}
-                                onChange={(e) => setArcBottomR(e.target.value)}
-                                placeholder="10.0"
-                            />
-                            <div className="quick-buttons">
-                                <button className="q-btn" onClick={() => setArcBottomR('10.0')}>10R</button>
-                                <button className="q-btn" onClick={() => setArcBottomR('20.0')}>20R</button>
-                                <button className="q-btn" onClick={() => setArcBottomR('50.0')}>50R</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* 底R - 底R形状のときのみ表示 */}
-                {grooveShape === 'corner-r' && (
-                    <div className="corner-section">
-                        <label>底R（隅R）</label>
-                        <div className="extra-input">
+                    {grooveShape === 'corner-r' && (
+                        <div className="input-group">
+                            <label>底R（共通）</label>
                             <input
                                 type="number"
                                 className="step-input small"
                                 value={cornerR}
                                 onChange={(e) => setCornerR(e.target.value)}
-                                placeholder="2.0"
+                                placeholder="0.5"
                             />
-                            <span className="input-hint">溝深さ以下を推奨</span>
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
+
+                {/* 高度な設定トグル */}
+                <div className="corner-section" style={{ borderTop: '1px solid var(--color-border)', paddingTop: '1rem', marginTop: '1rem' }}>
+                    <button
+                        className={`btn ${showAdvanced ? 'btn-secondary' : 'btn-ghost'}`}
+                        onClick={() => setShowAdvanced(!showAdvanced)}
+                        style={{ width: '100%', justifyContent: 'space-between' }}
+                    >
+                        <span>{showAdvanced ? '▼ 高度な幾何設定を隠す' : '▶ 高度な幾何設定（テーパ・個別R・肩処理）'}</span>
+                    </button>
+
+                    {showAdvanced && (
+                        <div className="advanced-fields" style={{ marginTop: '1rem' }}>
+                            <div className="input-row">
+                                <div className="input-group">
+                                    <label>左壁角度（度）</label>
+                                    <input
+                                        type="number"
+                                        className="step-input small"
+                                        value={leftAngle}
+                                        onChange={(e) => setLeftAngle(e.target.value)}
+                                    />
+                                </div>
+                                <div className="input-group">
+                                    <label>右壁角度（度）</label>
+                                    <input
+                                        type="number"
+                                        className="step-input small"
+                                        value={rightAngle}
+                                        onChange={(e) => setRightAngle(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <div className="input-row">
+                                <div className="input-group">
+                                    <label>左底R</label>
+                                    <input
+                                        type="number"
+                                        className="step-input small"
+                                        value={bottomLeftR}
+                                        onChange={(e) => setBottomLeftR(e.target.value)}
+                                        placeholder="0.5"
+                                    />
+                                </div>
+                                <div className="input-group">
+                                    <label>右底R</label>
+                                    <input
+                                        type="number"
+                                        className="step-input small"
+                                        value={bottomRightR}
+                                        onChange={(e) => setBottomRightR(e.target.value)}
+                                        placeholder="0.5"
+                                    />
+                                </div>
+                            </div>
+                            <div className="input-row">
+                                <div className="input-group">
+                                    <label>左肩処理</label>
+                                    <select value={topLeftType} onChange={(e: any) => setTopLeftType(e.target.value)} className="step-input small">
+                                        <option value="none">なし</option>
+                                        <option value="chamfer">面取り (C)</option>
+                                        <option value="round">R加工</option>
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label>サイズ</label>
+                                    <input
+                                        type="number"
+                                        className="step-input small"
+                                        value={topLeftSize}
+                                        onChange={(e) => setTopLeftSize(e.target.value)}
+                                        disabled={topLeftType === 'none'}
+                                    />
+                                </div>
+                            </div>
+                            <div className="input-row">
+                                <div className="input-group">
+                                    <label>右肩処理</label>
+                                    <select value={topRightType} onChange={(e: any) => setTopRightType(e.target.value)} className="step-input small">
+                                        <option value="none">なし</option>
+                                        <option value="chamfer">面取り (C)</option>
+                                        <option value="round">R加工</option>
+                                    </select>
+                                </div>
+                                <div className="input-group">
+                                    <label>サイズ</label>
+                                    <input
+                                        type="number"
+                                        className="step-input small"
+                                        value={topRightSize}
+                                        onChange={(e) => setTopRightSize(e.target.value)}
+                                        disabled={topRightType === 'none'}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
 
                 {/* 複数溝用パラメータ */}
                 {grooveCount === 'multiple' && (
-                    <div className="input-row">
+                    <div className="input-row" style={{ marginTop: '1rem', borderTop: '1px solid var(--color-border)', paddingTop: '1rem' }}>
                         <div className="input-group">
                             <label>溝の数</label>
                             <input
@@ -365,13 +459,13 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
                 )}
 
                 {/* アクションボタン */}
-                <div className="action-buttons">
+                <div className="action-buttons" style={{ marginTop: '1rem' }}>
                     <button className="btn btn-secondary" onClick={handleClear}>
                         🗑 クリア
                     </button>
                     {result && (
                         <button className="btn btn-primary" onClick={handleCopy}>
-                            📋 NCコードコピー
+                            📋 補正済みNCコピー
                         </button>
                     )}
                 </div>
@@ -382,27 +476,38 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
                 <div className="results-view" style={{ marginTop: '1rem' }}>
                     <div className="results-header">
                         <h3>📐 計算結果（{result.grooves.length}溝・{
-                            result.grooveType === 'full-r' ? '完全R' :
-                                result.grooveType === 'arc-bottom' ? '指定R底' :
-                                    result.grooveType === 'corner-r' ? '底R' : '直角'
+                            result.grooveType === 'advanced' ? '高度設定' :
+                                result.grooveType === 'full-r' ? '完全R' :
+                                    result.grooveType === 'arc-bottom' ? '指定R底' :
+                                        result.grooveType === 'corner-r' ? '底R' : '直角'
                         }）</h3>
                     </div>
 
-                    {/* NCコード表示 */}
                     <div className="nc-code-view">
                         <div className="nc-code-header">
-                            <span className="nc-code-title">NCプログラム</span>
+                            <span className="nc-code-title">NCプログラム（ノーズR補正済み）</span>
                         </div>
                         <div className="nc-code-body">
                             {result.grooves.map((g, i) => (
                                 <div key={i} className="nc-groove-block" style={{ marginBottom: '0.75rem' }}>
+                                    <div className="nc-line highlight"> ; --- 溝 {g.index} --- </div>
                                     <div className="nc-line">
                                         <span className="nc-line-num">N{(i + 1) * 100}</span>
-                                        <span className="nc-command">G00 X{(g.entryX + 2).toFixed(3)} Z{g.entryZ.toFixed(3)}</span>
+                                        <span className="nc-command">G00 X{(g.entryX + 5).toFixed(3)} Z{g.entryZ.toFixed(3)}</span>
                                     </div>
 
-                                    {g.fullRArc ? (
-                                        // 完全Rまたは指定R底
+                                    {g.advancedSegments ? (
+                                        g.advancedSegments.map((seg: any, sIdx: number) => {
+                                            const x = seg.compensated?.endX ?? seg.endX
+                                            const z = seg.compensated?.endZ ?? seg.endZ
+                                            return (
+                                                <div className="nc-line" key={sIdx}>
+                                                    <span className="nc-line-num">N{(i + 1) * 100 + (sIdx + 1) * 10}</span>
+                                                    <span className="nc-command">G01 X{x.toFixed(3)} Z{z.toFixed(3)} F0.1</span>
+                                                </div>
+                                            )
+                                        })
+                                    ) : g.fullRArc ? (
                                         <div className="nc-line arc">
                                             <span className="nc-line-num">N{(i + 1) * 100 + 10}</span>
                                             <span className="nc-command">
@@ -410,7 +515,6 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
                                             </span>
                                         </div>
                                     ) : g.cornerR ? (
-                                        // 底R形状
                                         <>
                                             <div className="nc-line">
                                                 <span className="nc-line-num">N{(i + 1) * 100 + 10}</span>
@@ -434,7 +538,6 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
                                             </div>
                                         </>
                                     ) : (
-                                        // 直角形状
                                         <>
                                             <div className="nc-line">
                                                 <span className="nc-line-num">N{(i + 1) * 100 + 10}</span>
@@ -448,40 +551,12 @@ export function GrooveCalculator({ onBack }: GrooveCalculatorProps) {
                                     )}
 
                                     <div className="nc-line">
-                                        <span className="nc-line-num">N{(i + 1) * 100 + 50}</span>
-                                        <span className="nc-command">G01 X{(g.entryX + 2).toFixed(3)}</span>
+                                        <span className="nc-line-num">N{(i + 1) * 100 + 90}</span>
+                                        <span className="nc-command">G01 X{(g.entryX + 5).toFixed(3)}</span>
                                     </div>
                                 </div>
                             ))}
                         </div>
-                    </div>
-
-                    {/* 座標テーブル */}
-                    <div className="coord-table">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>溝</th>
-                                    <th>進入X</th>
-                                    <th>進入Z</th>
-                                    <th>底X</th>
-                                    <th>退避Z</th>
-                                    {(result.grooveType === 'full-r' || result.grooveType === 'arc-bottom') && <th>R値</th>}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {result.grooves.map((g) => (
-                                    <tr key={g.index}>
-                                        <td className="center">{g.index}</td>
-                                        <td className="mono">{g.entryX.toFixed(3)}</td>
-                                        <td className="mono">{g.entryZ.toFixed(3)}</td>
-                                        <td className="mono highlight">{g.bottomX.toFixed(3)}</td>
-                                        <td className="mono">{g.exitZ.toFixed(3)}</td>
-                                        {g.fullRArc && <td className="mono">{g.fullRArc.radius.toFixed(3)}</td>}
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
                     </div>
                 </div>
             )}

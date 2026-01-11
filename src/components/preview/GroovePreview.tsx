@@ -23,8 +23,20 @@ export function GroovePreview({ result }: GroovePreviewProps) {
     result.grooves.forEach(g => {
         allCoords.push({ x: g.entryX, z: g.entryZ })
         allCoords.push({ x: g.bottomX, z: g.bottomZ })
-        allCoords.push({ x: g.bottomX, z: g.exitZ })
-        allCoords.push({ x: g.entryX, z: g.exitZ })
+
+        if (g.advancedSegments) {
+            g.advancedSegments.forEach((seg: any) => {
+                allCoords.push({ x: seg.startX, z: seg.startZ })
+                allCoords.push({ x: seg.endX, z: seg.endZ })
+                if (seg.compensated) {
+                    allCoords.push({ x: seg.compensated.startX, z: seg.compensated.startZ })
+                    allCoords.push({ x: seg.compensated.endX, z: seg.compensated.endZ })
+                }
+            })
+        } else {
+            allCoords.push({ x: g.bottomX, z: g.exitZ })
+            allCoords.push({ x: g.entryX, z: g.exitZ })
+        }
 
         if (g.cornerR) {
             allCoords.push({ x: g.cornerR.leftArc.startX, z: g.cornerR.leftArc.startZ })
@@ -254,7 +266,55 @@ export function GroovePreview({ result }: GroovePreviewProps) {
                             )
                         }
 
-                        // 直角形状
+                        // 高機能（アドバンスド）形状
+                        if (g.advancedSegments && g.advancedSegments.length > 0) {
+                            return (
+                                <g key={`groove-${i}`}>
+                                    {g.advancedSegments.map((seg: any, idx: number) => {
+                                        const sX = toSvgX(seg.startZ)
+                                        const sY = toSvgY(seg.startX / 2)
+                                        const eX = toSvgX(seg.endZ)
+                                        const eY = toSvgY(seg.endX / 2)
+
+                                        // 補正後のパス（点線などで表示）
+                                        let compPath = null
+                                        if (seg.compensated) {
+                                            const csX = toSvgX(seg.compensated.startZ)
+                                            const csY = toSvgY(seg.compensated.startX / 2)
+                                            const ceX = toSvgX(seg.compensated.endZ)
+                                            const ceY = toSvgY(seg.compensated.endX / 2)
+                                            compPath = (
+                                                <line
+                                                    x1={csX} y1={csY} x2={ceX} y2={ceY}
+                                                    stroke="#fbbf24"
+                                                    strokeWidth="1.5"
+                                                    strokeDasharray="4 2"
+                                                    opacity="0.8"
+                                                />
+                                            )
+                                        }
+
+                                        return (
+                                            <g key={`seg-${idx}`}>
+                                                <line
+                                                    x1={sX} y1={sY} x2={eX} y2={eY}
+                                                    stroke="#60a5fa"
+                                                    strokeWidth="2.5"
+                                                    strokeLinecap="round"
+                                                />
+                                                {compPath}
+                                            </g>
+                                        )
+                                    })}
+                                    {/* 代表的なポイントマーカー */}
+                                    <circle cx={toSvgX(g.entryZ)} cy={toSvgY(g.entryX / 2)} r="5" fill="#10b981" stroke="#fff" strokeWidth="1.5" />
+                                    <circle cx={toSvgX(g.exitZ)} cy={toSvgY(g.entryX / 2)} r="5" fill="#ef4444" stroke="#fff" strokeWidth="1.5" />
+                                    <text x={toSvgX(g.entryZ) + 5} y={toSvgY(g.entryX / 2) - 12} fill="#64748b" fontSize="11">高度な溝{g.index}</text>
+                                </g>
+                            )
+                        }
+
+                        // 直角形状 (元のコードを維持)
                         const bottomY = toSvgY(bottomR)
                         const pathD = `
                             M ${leftTopX} ${leftTopY}
