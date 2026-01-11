@@ -212,8 +212,13 @@ export function calculateShape(
                 }
             }
 
-            const currentPointObj = { x: currentX, z: currentZ }
-            const cornerCalc = calculateCorner(currentPointObj as Point, nextPoint, afterNextPoint)
+            const currentPointObj: Point = {
+                x: currentX,
+                z: currentZ,
+                corner: { type: 'none', size: 0 },
+                id: 'curr'
+            }
+            const cornerCalc = calculateCorner(currentPointObj, nextPoint, afterNextPoint)
 
             if (cornerCalc) {
                 results.push({
@@ -688,14 +693,25 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
         }
     }
 
-    const bX = u1x + u2x, bZ = u1z + u2z, bL = Math.sqrt(bX * bX + bZ * bZ)
-    if (bL === 0) return null
-    const half = Math.acos(Math.max(-1, Math.min(1, u1x * u2x + u1z * u2z))) / 2
+    const innerProduct = u1x * u2x + u1z * u2z
+    const angleBetween = Math.acos(Math.max(-1, Math.min(1, innerProduct)))
+    const half = angleBetween / 2
 
     // Rの自動調整 (Limit check)
-    const maxTDist = Math.min(l1, l2) * 0.99
-    const maxR = maxTDist * Math.tan(half)
-    const adjustedSize = Math.min(originalSize, maxR)
+    // 角度が非常に小さい（直線に近い）場合、tan(half) が小さくなり、maxR が巨大になる。 
+    // また half=0 の場合 tan(half)=0 になるためゼロ除算に注意。
+    let adjustedSize = originalSize
+    if (half > 0.0001) {
+        const maxTDist = Math.min(l1, l2) * 0.99
+        const maxR = maxTDist * Math.tan(half)
+        adjustedSize = Math.min(originalSize, maxR)
+    } else {
+        // 直線に近い場合はRを入れる余地がない
+        adjustedSize = 0
+    }
+
+    const bX = u1x + u2x, bZ = u1z + u2z, bL = Math.sqrt(bX * bX + bZ * bZ)
+    if (bL < 1e-6) return null // 180度または0度の場合は計算不能
 
     const cDist = adjustedSize / Math.sin(half), tDist = adjustedSize / Math.tan(half)
     const cX = p2.x / 2 + (bX / bL) * cDist, cZ = p2.z + (bZ / bL) * cDist

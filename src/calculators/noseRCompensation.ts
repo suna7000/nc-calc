@@ -34,15 +34,19 @@ function round3(v: number): number {
 
 export function oToP(ox: number, oz: number, noseR: number, toolType: number): { px: number; pz: number } {
     let dx = 0, dz = 0
+    // NC旋盤の仮想刃先点(O)からプログラム点(P)へのオフセット
+    // 直径指定のため、X方向(dx)は半径差の2倍
+    // P(ツール中心) に対する O(仮想刃先点) の相対位置
+    // Tip 3 (外径手前) の場合: P_x = O_x + 2R, P_z = O_z - R  => O_x = P_x - 2R, O_z = P_z + R
     switch (toolType) {
-        case 1: dx = 2 * noseR; dz = -noseR; break;   // Tip 1: (X+, Z-) Internal/Back
-        case 2: dx = 2 * noseR; dz = noseR; break;    // Tip 2: (X+, Z+) Internal/Front
-        case 3: dx = -2 * noseR; dz = -noseR; break;  // Tip 3: (X-, Z-) External/Standard
-        case 4: dx = -2 * noseR; dz = noseR; break;   // Tip 4: (X-, Z+) External/Back
-        case 5: dx = 0; dz = -noseR; break;           // Tip 5: (Z-) Face center
-        case 6: dx = 2 * noseR; dz = 0; break;        // Tip 6: (X+) ID center
-        case 7: dx = 0; dz = noseR; break;            // Tip 7: (Z+) Back center
-        case 8: dx = -2 * noseR; dz = 0; break;       // Tip 8: (X-) OD center
+        case 1: dx = 2 * noseR; dz = noseR; break;    // Tip 1: (X+, Z+) ID Back
+        case 2: dx = 2 * noseR; dz = -noseR; break;   // Tip 2: (X+, Z-) ID Front
+        case 3: dx = -2 * noseR; dz = -noseR; break;  // Tip 3: (X-, Z-) OD Front
+        case 4: dx = -2 * noseR; dz = noseR; break;   // Tip 4: (X-, Z+) OD Back
+        case 5: dx = 0; dz = -noseR; break;           // Tip 5: (Z-) Face Front
+        case 6: dx = 2 * noseR; dz = 0; break;        // Tip 6: (X+) ID Center
+        case 7: dx = 0; dz = noseR; break;            // Tip 7: (Z+) Back Face
+        case 8: dx = -2 * noseR; dz = 0; break;       // Tip 8: (X-) OD Center
         case 9: dx = 0; dz = 0; break;                // Tip 9: Center
         default: dx = -2 * noseR; dz = -noseR;
     }
