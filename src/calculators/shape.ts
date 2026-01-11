@@ -6,7 +6,11 @@
 import type { Shape, Point, CornerCalculation } from '../models/shape'
 import type { MachineSettings } from '../models/settings'
 import { defaultMachineSettings } from '../models/settings'
-import { calculateSmidManualShifts } from './noseRCompensation'
+import {
+    CenterTrackCalculator,
+    type Segment,
+    type SegmentType
+} from './noseRCompensation'
 
 // 計算結果
 export interface ShapeCalculationResult {
@@ -35,6 +39,8 @@ export interface SegmentResult {
     gCode?: string
     // 描写用スイープ方向 (0: CCW, 1: CW)
     sweep?: 0 | 1
+    // 凸・凹判定
+    isConvex?: boolean
     // ノーズR補正後の座標（補正有効時のみ）
     compensated?: {
         startX: number
@@ -135,6 +141,7 @@ export function calculateShape(
                         centerX: adjacentResult.arc2.centerX,
                         centerZ: adjacentResult.arc2.centerZ,
                         radius: adjacentResult.arc2.radius,
+                        isConvex: afterNextPoint.corner.type === 'kaku-r',
                         gCode: determineGCode(adjacentResult.arc2.isLeftTurn, afterNextPoint.corner.type as 'kaku-r' | 'sumi-r', machineSettings),
                         sweep: adjacentResult.arc2.isLeftTurn ? 0 : 1
                     })
@@ -146,7 +153,7 @@ export function calculateShape(
             }
 
             const currentPointObj = { x: currentX, z: currentZ }
-            const cornerCalc = calculateCorner(currentPointObj as Point, nextPoint, afterNextPoint, noseR)
+            const cornerCalc = calculateCorner(currentPointObj as Point, nextPoint, afterNextPoint)
 
             if (cornerCalc) {
                 results.push({
@@ -184,6 +191,7 @@ export function calculateShape(
                                 centerX: dualArc.arc1.centerX,
                                 centerZ: dualArc.arc1.centerZ,
                                 radius: nextPoint.corner.size,
+                                isConvex: r1Type === 'kaku-r',
                                 gCode: determineGCode(dualArc.arc1.isLeftTurn, r1Type, machineSettings),
                                 sweep: dualArc.arc1.isLeftTurn ? 0 : 1
                             })
@@ -199,6 +207,7 @@ export function calculateShape(
                                 centerX: dualArc.arc2.centerX,
                                 centerZ: dualArc.arc2.centerZ,
                                 radius: nextPoint.corner.secondArc.size,
+                                isConvex: r2Type === 'kaku-r',
                                 gCode: determineGCode(dualArc.arc2.isLeftTurn, r2Type, machineSettings),
                                 sweep: dualArc.arc2.isLeftTurn ? 0 : 1
                             })
@@ -218,6 +227,7 @@ export function calculateShape(
                             centerX: cornerCalc.centerX,
                             centerZ: cornerCalc.centerZ,
                             radius: cornerCalc.adjustedRadius || nextPoint.corner.size,
+                            isConvex: nextPoint.corner.type === 'kaku-r',
                             gCode: determineGCode(!!cornerCalc.isLeftTurn, nextPoint.corner.type as 'kaku-r' | 'sumi-r', machineSettings),
                             sweep: sweep as 0 | 1,
                             advancedInfo: {
@@ -278,53 +288,49 @@ export function calculateShape(
             checkInterference(results, activeTool, machineSettings, warnings)
         }
 
-        // 直線セグメントにノーズR補正（fx, fz）を適用
+        // ノーズR補正（幾何学的エンジン：中心軌跡法）を適用
         if (noseR > 0) {
             const isInternal = activeTool.type === 'internal'
-            const method = machineSettings.noseRCompensation.method || 'geometric'
 
-            results.forEach(seg => {
+            // 1. SegmentResultを算引用のSegment[]形式に変換
+            const profile: Segment[] = results.map(res => {
+                const isConvex = res.isConvex
+                return {
+                    type: res.type === 'corner-r' ? 'arc' : 'line' as SegmentType,
+                    startX: res.startX,
+                    startZ: res.startZ,
+                    endX: res.endX,
+                    endZ: res.endZ,
+                    centerX: res.centerX,
+                    centerZ: res.centerZ,
+                    radius: res.radius,
+                    isConvex: isConvex
+                }
+            })
+
+            // 2. CenterTrackCalculatorを実行
+            const calculator = new CenterTrackCalculator(noseR, !isInternal, activeTool.toolTipNumber || 3)
+            const compensatedSegments = calculator.calculate(profile)
+
+            // 3. 結果を元のresultsにマッピング
+            compensatedSegments.forEach((comp, idx) => {
+                const seg = results[idx]
+                seg.compensated = {
+                    startX: comp.compensatedStartX,
+                    startZ: comp.compensatedStartZ,
+                    endX: comp.compensatedEndX,
+                    endZ: comp.compensatedEndZ,
+                    radius: comp.compensatedRadius,
+                    i: comp.compensatedI,
+                    k: comp.compensatedK
+                }
+
+                // 高度な情報（fx, fz）も表示用にセット（旧来の互換性のため）
                 if (seg.type === 'line' && seg.angle !== undefined) {
-                    let fx: number, fz: number
-
-                    if (method === 'smid') {
-                        // Peter Smid方式（Chapter 27）
-                        const result = calculateSmidManualShifts(seg.angle, noseR)
-                        fx = result.deltaX
-                        fz = result.deltaZ
-                        // 内径加工の場合は反転
-                        if (isInternal) fx = -fx
-                        if (machineSettings.cuttingDirection === '+z') fz = -fz
-                    } else {
-                        // 幾何学的アプローチ
-                        // テーパーの向きを判定：Xが増加=上り=背刃、Xが減少=下り=前刃
-                        // 外径加工・-Z方向の場合、セグメントのendX > startXなら上りテーパー
-                        const isRising = seg.endX > seg.startX
-                        const result = calculateLineNoseROffset(
-                            seg.angle,
-                            noseR,
-                            isRising,
-                            isInternal,
-                            machineSettings.cuttingDirection
-                        )
-                        fx = result.fx
-                        fz = result.fz
-                    }
-
-                    // 補正量をセグメントに保存
                     seg.advancedInfo = {
                         ...seg.advancedInfo,
-                        manualShiftX: fx,  // X補正量（直径）
-                        manualShiftZ: fz   // Z補正量
-                    }
-                    // 補正後座標を計算
-                    // X: 補正量を加算（ノーズRの分だけ外側へ）
-                    // Z: 補正量を減算（-Z方向の加工で仮想刃先より実際の接点が-Z側にあるため）
-                    seg.compensated = {
-                        startX: round3(seg.startX + fx),
-                        startZ: round3(seg.startZ - fz),
-                        endX: round3(seg.endX + fx),
-                        endZ: round3(seg.endZ - fz)
+                        manualShiftX: round3(comp.compensatedEndX - seg.endX),
+                        manualShiftZ: round3(seg.endZ - comp.compensatedEndZ)
                     }
                 }
             })
@@ -564,73 +570,6 @@ function calculateAngle(x1: number, z1: number, x2: number, z2: number): number 
     return round3(Math.atan(dx / dz) * (180 / Math.PI))
 }
 
-/**
- * 直線セグメントのノーズR補正計算（教科書の計算式）
- * 
- * テーパーの向きにより刃先使い分け:
- *   - 下りテーパー（Xが小さくなる）→ 前刃 → 1 - tan()
- *   - 上りテーパー（Xが大きくなる）→ 背刃 → 1 + tan()
- * 
- * 計算式:
- *   前刃: fx = 2R(1 - tan(φ/2)), fz = R(1 - tan(θ/2))
- *   背刃: fx = 2R(1 + tan(φ/2)), fz = R(1 + tan(θ/2))
- * 
- * @param angleDeg テーパー角度（度）。0°=Z軸に平行、90°=X軸に平行
- * @param noseR ノーズR
- * @param isRising 上りテーパー（背刃使用）かどうか
- * @param isInternal 内径加工かどうか
- * @param cuttingDir 切削方向
- * @returns {fx, fz} 補正量（fx:直径値、fz:単位値）
- */
-function calculateLineNoseROffset(
-    angleDeg: number,
-    noseR: number,
-    isRising: boolean = false,
-    isInternal: boolean = false,
-    cuttingDir: '+z' | '-z' = '-z'
-): { fx: number, fz: number } {
-    if (noseR <= 0 || angleDeg === undefined) {
-        return { fx: 0, fz: 0 }
-    }
-
-    const R = noseR
-    const theta = angleDeg * (Math.PI / 180)  // テーパー角度（ラジアン）
-    const phi = (Math.PI / 2) - theta         // φ = 90° - θ
-
-    let fx: number, fz: number
-
-    if (isRising) {
-        // 背刃: 1 + tan()
-        fx = 2 * R * (1 + Math.tan(phi / 2))
-        fz = R * (1 + Math.tan(theta / 2))
-    } else {
-        // 前刃: 1 - tan()
-        fx = 2 * R * (1 - Math.tan(phi / 2))
-        fz = R * (1 - Math.tan(theta / 2))
-    }
-
-    // θ=90°近傍でのtan発散を防ぐ
-    if (angleDeg >= 89.9) {
-        fx = isRising ? 2 * R : 2 * R  // θ=90° → 端面加工
-        fz = 0
-    }
-    if (angleDeg <= 0.1) {
-        fx = 0  // θ=0° → Z軸に平行
-        fz = R  // Z補正はR
-    }
-
-    // 内径加工の場合はX方向が反転
-    if (isInternal) {
-        fx = -fx
-    }
-
-    // +Z方向切削の場合はZ方向が反転
-    if (cuttingDir === '+z') {
-        fz = -fz
-    }
-
-    return { fx: round3(fx), fz: round3(fz) }
-}
 
 /**
  * G02/G03判定
@@ -663,25 +602,11 @@ function determineGCode(isLeftTurn: boolean, _type: 'kaku-r' | 'sumi-r', setting
  * @param noseR ノーズR補正値（0の場合は補正なし）
  * @returns 補正後の接点座標、補正後Rなど
  */
-function calculateCorner(p1: Point, p2: Point, p3: Point, noseR: number = 0): CornerCalculation | null {
+function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | null {
     const originalSize = p2.corner.size
     if (originalSize <= 0) return null
 
-    // ノーズR補正を適用
-    // 角R（凸角）: 補正後R = 元R + ノーズR
-    // 隅R（凹角）: 補正後R = 元R - ノーズR
     let adjustedSize = originalSize
-    if (noseR > 0) {
-        if (p2.corner.type === 'kaku-r') {
-            adjustedSize = originalSize + noseR
-        } else if (p2.corner.type === 'sumi-r') {
-            adjustedSize = originalSize - noseR
-            if (adjustedSize <= 0) {
-                // 補正後Rが0以下になる場合は元のRで計算（警告は別途）
-                adjustedSize = originalSize
-            }
-        }
-    }
 
     const v1x = (p1.x - p2.x) / 2, v1z = p1.z - p2.z
     const v2x = (p3.x - p2.x) / 2, v2z = p3.z - p2.z
@@ -698,11 +623,8 @@ function calculateCorner(p1: Point, p2: Point, p3: Point, noseR: number = 0): Co
     const bX = u1x + u2x, bZ = u1z + u2z, bL = Math.sqrt(bX * bX + bZ * bZ)
     if (bL === 0) return null
     const half = Math.acos(Math.max(-1, Math.min(1, u1x * u2x + u1z * u2z))) / 2
-    const cSign = p2.corner.type === 'kaku-r' ? 1 : -1
-
-    // 補正後Rで接点距離と円弧中心を計算
     const cDist = adjustedSize / Math.sin(half), tDist = adjustedSize / Math.tan(half)
-    const cX = p2.x / 2 + (bX / bL) * cDist * cSign, cZ = p2.z + (bZ / bL) * cDist * cSign
+    const cX = p2.x / 2 + (bX / bL) * cDist, cZ = p2.z + (bZ / bL) * cDist
     const eX = p2.x / 2 + u1x * tDist, eZ = p2.z + u1z * tDist
     const xX = p2.x / 2 + u2x * tDist, xZ = p2.z + u2z * tDist
 
