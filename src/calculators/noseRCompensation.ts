@@ -32,25 +32,37 @@ function round3(v: number): number {
     return Math.round(v * 1000) / 1000
 }
 
-export function oToP(ox: number, oz: number, noseR: number, toolType: number): { px: number; pz: number } {
+/**
+ * 工具中心点 (P) からプログラム上の仮想刃先点 (O) への変換
+ * O = P - V_offset * dirX
+ * 
+ * @param px 工具中心X (直径)
+ * @param pz 工具中心Z
+ * @param noseR ノーズR
+ * @param toolType チップ番号 (1-8)
+ * @param dirX 座標系係数 (Rear: 1, Front: -1)
+ */
+export function pToO(px: number, pz: number, noseR: number, toolType: number, dirX: number = 1): { ox: number; oz: number } {
     let dx = 0, dz = 0
-    // NC旋盤の仮想刃先点(O)からプログラム点(P)へのオフセット
-    // 直径指定のため、X方向(dx)は半径差の2倍
-    // P(ツール中心) に対する O(仮想刃先点) の相対位置
-    // Tip 3 (外径手前) の場合: P_x = O_x + 2R, P_z = O_z - R  => O_x = P_x - 2R, O_z = P_z + R
+    // Tip番号ごとのノーズR中心Pから仮想刃先点Oへの相対ベクトル [半径値]
+    // 規格: P = O + V_offset * dirX
     switch (toolType) {
-        case 1: dx = 2 * noseR; dz = noseR; break;    // Tip 1: (X+, Z+) ID Back
-        case 2: dx = 2 * noseR; dz = -noseR; break;   // Tip 2: (X+, Z-) ID Front
-        case 3: dx = -2 * noseR; dz = -noseR; break;  // Tip 3: (X-, Z-) OD Front
-        case 4: dx = -2 * noseR; dz = noseR; break;   // Tip 4: (X-, Z+) OD Back
-        case 5: dx = 0; dz = -noseR; break;           // Tip 5: (Z-) Face Front
-        case 6: dx = 2 * noseR; dz = 0; break;        // Tip 6: (X+) ID Center
-        case 7: dx = 0; dz = noseR; break;            // Tip 7: (Z+) Back Face
-        case 8: dx = -2 * noseR; dz = 0; break;       // Tip 8: (X-) OD Center
-        case 9: dx = 0; dz = 0; break;                // Tip 9: Center
-        default: dx = -2 * noseR; dz = -noseR;
+        case 1: dx = -noseR; dz = noseR; break;   // (X-, Z+)
+        case 2: dx = -noseR; dz = -noseR; break;  // (X-, Z-)
+        case 3: dx = noseR; dz = noseR; break;   // (X+, Z+)
+        case 4: dx = noseR; dz = -noseR; break;  // (X+, Z-)
+        case 5: dx = 0; dz = noseR; break;   // (Z+)
+        case 6: dx = -noseR; dz = 0; break;       // (X-)
+        case 7: dx = 0; dz = -noseR; break;  // (Z-)
+        case 8: dx = noseR; dz = 0; break;       // (X+)
+        case 9: dx = 0; dz = 0; break;
+        default: dx = noseR; dz = noseR;
     }
-    return { px: round3(ox + dx), pz: round3(oz + dz) }
+    // プログラム点 O = P - V_offset * dirX
+    // X座標は直径値(px, ox)を扱うため、2倍する
+    const ox = px - (dx * 2) * dirX
+    const oz = pz - dz
+    return { ox: round3(ox), oz: round3(oz) }
 }
 
 export function calculateArcOffset(radius: number, isConvex: boolean, noseR: number): { compensatedRadius: number } {
@@ -63,9 +75,16 @@ export function calculateCompensatedIK(startX: number, startZ: number, centerX: 
 }
 
 export class CenterTrackCalculator {
-    private noseR: number; private isExternal: boolean; private toolType: number;
-    constructor(noseR: number, isExternal: boolean = true, toolType: number = 3) {
-        this.noseR = noseR; this.isExternal = isExternal; this.toolType = toolType;
+    private noseR: number;
+    private toolType: number;
+    private dirX: number;     // 刃物台係数 (Rear: 1, Front: -1)
+    private sideSign: number; // 内外径係数 (Ext: 1, Int: -1)
+
+    constructor(noseR: number, isExternal: boolean = true, toolType: number = 3, toolPost: 'front' | 'rear' = 'rear') {
+        this.noseR = noseR;
+        this.toolType = toolType;
+        this.dirX = toolPost === 'rear' ? 1 : -1;
+        this.sideSign = isExternal ? 1 : -1;
     }
 
     calculate(profile: Segment[]): CompensatedSegment[] {
@@ -79,40 +98,45 @@ export class CenterTrackCalculator {
             if (i === 0) {
                 // 始端
                 const n = this.getNormalAt(profile[0], 'start')
-                const p = oToP((profile[0].startX / 2 + n.nx * this.noseR) * 2, profile[0].startZ + n.nz * this.noseR, this.noseR, this.toolType)
-                px = p.px; pz = p.pz
+                const op = pToO((profile[0].startX / 2 + n.nx * this.noseR) * 2, profile[0].startZ + n.nz * this.noseR, this.noseR, this.toolType, this.dirX)
+                px = op.ox; pz = op.oz
             } else if (i === profile.length) {
                 // 終端
                 const prev = profile[i - 1]
                 const n = this.getNormalAt(prev, 'end')
-                const p = oToP((prev.endX / 2 + n.nx * this.noseR) * 2, prev.endZ + n.nz * this.noseR, this.noseR, this.toolType)
-                px = p.px; pz = p.pz
+                const op = pToO((prev.endX / 2 + n.nx * this.noseR) * 2, prev.endZ + n.nz * this.noseR, this.noseR, this.toolType, this.dirX)
+                px = op.ox; pz = op.oz
             } else {
                 // セグメント間の遷移点
                 const prev = profile[i - 1]
                 const next = profile[i]
 
-                // 二等分線投影手法 (Bisector Projection)
-                // これにより、手計算パターンの tan(theta/2) 補正が自動的に行われる
                 const n1 = this.getNormalAt(prev, 'end')
                 const n2 = this.getNormalAt(next, 'start')
 
-                const dot = Math.max(-1, Math.min(1, n1.nx * n2.nx + n1.nz * n2.nz))
-                const cosHalfSq = (1 + dot) / 2
-                const cosHalf = Math.sqrt(Math.max(0.01, cosHalfSq))
-                const dist = this.noseR / cosHalf // 投影距離
+                const dot = Math.max(-1.0, Math.min(1.0, n1.nx * n2.nx + n1.nz * n2.nz))
+                const cosHalfSq = (1.0 + dot) / 2.0
+                const cosHalf = Math.sqrt(Math.max(0.001, cosHalfSq)) // 極小値をガード
+
+                // 投影距離のガード：鋭角（約140度以上の旋回）で補正が発散するのを物理的限界で止める
+                // 標準的なR0.4であれば 最大1.6mm 程度のシフトに制限
+                const dist = Math.min(this.noseR * 4.0, this.noseR / cosHalf)
 
                 let bx = n1.nx + n2.nx, bz = n1.nz + n2.nz
                 const blen = Math.sqrt(bx * bx + bz * bz)
-                if (blen < 1e-6) { bx = n1.nx; bz = n1.nz }
-                else { bx /= blen; bz /= blen }
 
-                const op = {
-                    x: (prev.endX / 2 + bx * dist) * 2,
-                    z: prev.endZ + bz * dist
+                // 平行または逆走の場合 (blenが極小) は、前のセグメントの法線を優先
+                if (blen < 1e-4) {
+                    bx = n1.nx
+                    bz = n1.nz
+                } else {
+                    bx /= blen
+                    bz /= blen
                 }
-                const p = oToP(op.x, op.z, this.noseR, this.toolType)
-                px = p.px; pz = p.pz
+
+                // 中心点 P の算出 (半径ベース計算して最後に pToO)
+                const op = pToO((prev.endX / 2 + bx * dist) * 2, prev.endZ + bz * dist, this.noseR, this.toolType, this.dirX)
+                px = op.ox; pz = op.oz
             }
             nodePoints.push({ x: px, z: pz })
         }
@@ -157,11 +181,18 @@ export class CenterTrackCalculator {
             if (isConvex) { nx = vx; nz = vz } else { nx = -vx; nz = -vz }
         } else {
             const dx = (seg.endX - seg.startX) / 2, dz = seg.endZ - seg.startZ
+            // 進行方向の左側への法線ベクトル
             nx = -dz; nz = dx
         }
         const len = Math.sqrt(nx * nx + nz * nz)
-        if (len === 0) return { nx: 0, nz: 0 }
-        const sign = this.isExternal ? 1 : -1
-        return { nx: nx / len * sign, nz: nz / len * sign }
+        if (len < 1e-9) return { nx: 0, nz: 0 }
+
+        // 物理係数による方向決定
+        // X方向 (nx): 刃物台位置 (dirX) と 内外径 (sideSign) の両方の影響を受ける
+        // Z方向 (nz): 内外径 (sideSign) の影響のみ受ける（Z軸の極性は刃物台で反転しないため）
+        return {
+            nx: (nx / len) * (this.sideSign * this.dirX),
+            nz: (nz / len) * (this.sideSign)
+        }
     }
 }

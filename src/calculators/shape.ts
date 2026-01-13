@@ -382,7 +382,12 @@ export function calculateShape(
             })
 
             // 2. CenterTrackCalculatorを実行
-            const calculator = new CenterTrackCalculator(noseR, !isInternal, activeTool.toolTipNumber || 3)
+            const calculator = new CenterTrackCalculator(
+                noseR,
+                !isInternal,
+                activeTool.toolTipNumber || 3,
+                machineSettings.toolPost
+            )
             const compensatedSegments = calculator.calculate(profile)
 
             // 3. 結果を元のresultsにマッピング

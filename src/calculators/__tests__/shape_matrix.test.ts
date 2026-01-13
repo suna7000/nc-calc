@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { calculateShape } from '../shape'
-import { createPoint, noCorner, type Point } from '../../models/shape'
+import { createPoint, noCorner } from '../../models/shape'
 import { defaultMachineSettings, type MachineSettings } from '../../models/settings'
 
 describe('ShapeBuilder Master Matrix Tests', () => {
@@ -16,6 +16,38 @@ describe('ShapeBuilder Master Matrix Tests', () => {
         expect(result.segments).toHaveLength(2)
     })
 
+    it('G-02: Taper (Slanted Line)', () => {
+        const p1 = createPoint(90, 0, noCorner())
+        const p2 = createPoint(100, -20, noCorner())
+        const result = calculateShape({ points: [p1, p2] }, settings)
+        expect(result.segments[0].type).toBe('line')
+        expect(result.segments[0].endX).toBe(100)
+    })
+
+    it('G-03: Single Kaku-R (Convex)', () => {
+        const p1 = createPoint(100, 0, noCorner())
+        const p2 = createPoint(100, -10, { type: 'kaku-r', size: 2 })
+        const p3 = createPoint(110, -10, noCorner())
+        const result = calculateShape({ points: [p1, p2, p3] }, settings)
+        expect(result.segments.some(s => s.type === 'corner-r')).toBe(true)
+    })
+
+    it('G-04: Single Sumi-R (Concave)', () => {
+        const p1 = createPoint(100, 0, noCorner())
+        const p2 = createPoint(100, -10, { type: 'sumi-r', size: 2 })
+        const p3 = createPoint(90, -10, noCorner())
+        const result = calculateShape({ points: [p1, p2, p3] }, settings)
+        expect(result.segments.some(s => s.type === 'corner-r')).toBe(true)
+    })
+
+    it('G-05: Single Chamfer (C)', () => {
+        const p1 = createPoint(100, 0, noCorner())
+        const p2 = createPoint(100, -10, { type: 'kaku-c', size: 2 })
+        const p3 = createPoint(120, -10, noCorner())
+        const result = calculateShape({ points: [p1, p2, p3] }, settings)
+        expect(result.segments.some(s => s.type === 'corner-c')).toBe(true)
+    })
+
     it('G-06: S-curve (Adjacent Arcs Case)', () => {
         const p1 = createPoint(90, 0, noCorner())
         const p2 = createPoint(90, -30, { type: 'sumi-r', size: 20 })
@@ -27,6 +59,27 @@ describe('ShapeBuilder Master Matrix Tests', () => {
         expect(rSegments).toHaveLength(2)
         expect(rSegments[0].endX).toBeCloseTo(rSegments[1].startX, 3)
         expect(rSegments[0].endZ).toBeCloseTo(rSegments[1].startZ, 3)
+    })
+
+    it('G-07: Dual R connection (Two R on one point)', () => {
+        const p1 = createPoint(100, 0, noCorner())
+        const p2 = createPoint(100, -10, {
+            type: 'sumi-r',
+            size: 5,
+            secondArc: { type: 'kaku-r', size: 3 }
+        })
+        const p3 = createPoint(120, -20, noCorner())
+        const result = calculateShape({ points: [p1, p2, p3] }, settings)
+        expect(result.segments.filter(s => s.type === 'corner-r').length).toBe(2)
+    })
+
+    it('G-08: Basic Groove Insertion', () => {
+        const p1 = createPoint(100, 0, noCorner())
+        const p2 = createPoint(100, -10, noCorner())
+        p2.groove = { depth: 2, width: 4 }
+        const p3 = createPoint(100, -20, noCorner())
+        const result = calculateShape({ points: [p1, p2, p3] }, settings)
+        expect(result.segments.length).toBeGreaterThan(4)
     })
 
     // --- 拡張幾何パターン (G-09 〜 G-12) ---
@@ -58,6 +111,37 @@ describe('ShapeBuilder Master Matrix Tests', () => {
 
         const rCount = result.segments.filter(s => s.type === 'corner-r').length
         expect(rCount).toBe(3)
+    })
+
+    // --- 補正・環境パターン (C-01 〜 C-07) ---
+    it('C-01: Nose R Compensation OFF', () => {
+        const offSettings = { ...settings, noseRCompensation: { ...settings.noseRCompensation, enabled: false } }
+        const p1 = createPoint(100, 0, noCorner())
+        const p2 = createPoint(100, -10, noCorner())
+        const result = calculateShape({ points: [p1, p2] }, offSettings)
+        expect(result.segments[0].compensated).toBeUndefined()
+    })
+
+    it('C-02: Nose R Compensation ON (Basic)', () => {
+        const onSettings = { ...settings, noseRCompensation: { ...settings.noseRCompensation, enabled: true } }
+        const p1 = createPoint(100, 0, noCorner())
+        const p2 = createPoint(100, -10, noCorner())
+        const result = calculateShape({ points: [p1, p2] }, onSettings)
+        expect(result.segments[0].compensated).toBeDefined()
+    })
+
+    it('C-03: Rear Toolpost and Cutting Direction (+Z)', () => {
+        const rearSettings: MachineSettings = {
+            ...settings,
+            toolPost: 'rear',
+            cuttingDirection: '+z',
+            noseRCompensation: { enabled: true, offsetNumber: 1, compensationDirection: 'auto', method: 'geometric' },
+        }
+        const p1 = createPoint(100, 0, noCorner())
+        const p2 = createPoint(100, 10, noCorner())
+        const result = calculateShape({ points: [p1, p2] }, rearSettings)
+        expect(result.segments[0].compensated).toBeDefined()
+        expect(result.segments[0].endZ).toBe(10)
     })
 
     // --- 補正・環境パターン (C-04 〜 C-07) ---
@@ -97,6 +181,24 @@ describe('ShapeBuilder Master Matrix Tests', () => {
         // プログラム座標（仮想刃先）は、補正後もワーク形状 X40 に一致するはず
         const compLine = result.segments[0].compensated!
         expect(compLine.startX).toBe(40)
+    })
+
+    it('E-01: Corner R auto-limiting (R too large)', () => {
+        const p1 = createPoint(100, 0, noCorner())
+        const p2 = createPoint(100, -5, { type: 'kaku-r', size: 10 }) // セグメント長5に対してR10
+        const p3 = createPoint(110, -5, noCorner())
+        const result = calculateShape({ points: [p1, p2, p3] }, settings)
+        const arc = result.segments.find(s => s.type === 'corner-r')
+        expect(arc).toBeDefined()
+        expect(arc!.radius).toBeLessThan(10) // 自動調整されていること
+    })
+
+    it('E-02: Tiny segment handling (Numerical stability)', () => {
+        const p1 = createPoint(100, 0, noCorner())
+        const p2 = createPoint(100.0001, -0.0001, noCorner())
+        const p3 = createPoint(100.0002, -0.0002, noCorner())
+        const result = calculateShape({ points: [p1, p2, p3] }, settings)
+        expect(result.segments).toBeDefined()
     })
 
     // --- 異常系・エッジケース (E-03 〜 E-04) ---
