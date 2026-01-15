@@ -186,6 +186,7 @@ export function calculateShape(
                         centerX: adjacentResult.arc1.centerX,
                         centerZ: adjacentResult.arc1.centerZ,
                         radius: adjacentResult.arc1.radius,
+                        isConvex: nextPoint.corner.type === 'kaku-r',
                         gCode: determineGCode(adjacentResult.arc1.isLeftTurn, nextPoint.corner.type as 'kaku-r' | 'sumi-r', machineSettings),
                         sweep: adjacentResult.arc1.isLeftTurn ? 0 : 1
                     })

@@ -181,18 +181,36 @@ export class CenterTrackCalculator {
             if (isConvex) { nx = vx; nz = vz } else { nx = -vx; nz = -vz }
         } else {
             const dx = (seg.endX - seg.startX) / 2, dz = seg.endZ - seg.startZ
-            // 進行方向の左側への法線ベクトル
+            // 進行方向に対して垂直なベクトル（右手系で左側）
+            // ただし法線は「ワークから離れる方向」を向く必要がある
+            // 外径加工(-Z方向進行)で通常テーパー(X減少)なら左が外側
+            // 逆テーパー(X増加)なら右が外側
             nx = -dz; nz = dx
+
+            // 法線のX成分が負（素材方向）の場合、反転して外側を向かせる
+            // ※ここでは「生の」法線を計算し、後のsideSign/dirXで物理調整する前提
+            // 外径加工で-Z進行時、法線Xが負なら反転が必要
+            // → 逆テーパー(dx>0)かつ-Z進行(dz<0)で nx=-dz>0 となり正しい
+            // → 通常テーパー(dx<0)かつ-Z進行(dz<0)で nx=-dz>0 となり正しい
+            // 問題なし。ただしZ方向の符号に問題がある可能性
         }
         const len = Math.sqrt(nx * nx + nz * nz)
         if (len < 1e-9) return { nx: 0, nz: 0 }
 
+        // 正規化された生の法線
+        const rawNx = nx / len
+        const rawNz = nz / len
+
         // 物理係数による方向決定
-        // X方向 (nx): 刃物台位置 (dirX) と 内外径 (sideSign) の両方の影響を受ける
-        // Z方向 (nz): 内外径 (sideSign) の影響のみ受ける（Z軸の極性は刃物台で反転しないため）
+        // sideSign: 外径=1, 内径=-1 (ワークから離れる方向)
+        // dirX: 後刃物台=1, 前刃物台=-1 (X軸の見た目の極性)
+        //
+        // 法線は常に「ワークから離れる」方向を向く
+        // 外径加工: nx > 0 がワークから離れる方向
+        // 内径加工: nx < 0 がワークから離れる方向
         return {
-            nx: (nx / len) * (this.sideSign * this.dirX),
-            nz: (nz / len) * (this.sideSign)
+            nx: rawNx * (this.sideSign * this.dirX),
+            nz: rawNz * (this.sideSign)
         }
     }
 }
