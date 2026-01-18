@@ -362,25 +362,45 @@ export function ResultsView({
                     <span className="nc-code-title">NCプログラム</span>
                 </div>
                 <div className="nc-code-body">
-                    {/* ノーズR補正開始 */}
-                    {machineSettings.noseRCompensation.enabled && (
-                        <div className="nc-line compensation">
-                            <span className="nc-line-num">N5</span>
-                            <span className="nc-command">
-                                {getCompensationGCode(machineSettings)} D{String(machineSettings.noseRCompensation.offsetNumber).padStart(2, '0')} ; ノーズR補正
-                            </span>
-                        </div>
-                    )}
+                    {/* 始点出力（補正あり/なしで異なる） */}
+                    {result.segments.length > 0 && (() => {
+                        const firstSeg = result.segments[0]
+                        const startX = firstSeg.compensated?.startX ?? firstSeg.startX
+                        const startZ = firstSeg.compensated?.startZ ?? firstSeg.startZ
+
+                        if (machineSettings.noseRCompensation.enabled) {
+                            // 補正あり：G42/G41 + 始点座標を同じ行に
+                            return (
+                                <div className="nc-line compensation">
+                                    <span className="nc-line-num">N5</span>
+                                    <span className="nc-command">
+                                        {getCompensationGCode(machineSettings)} D{String(machineSettings.noseRCompensation.offsetNumber).padStart(2, '0')} X{startX.toFixed(3)} Z{startZ.toFixed(3)} ; ノーズR補正開始
+                                    </span>
+                                </div>
+                            )
+                        } else {
+                            // 補正なし：始点座標のみ
+                            return (
+                                <div className="nc-line">
+                                    <span className="nc-line-num">N5</span>
+                                    <span className="nc-command">G01 X{startX.toFixed(3)} Z{startZ.toFixed(3)} ; 始点</span>
+                                </div>
+                            )
+                        }
+                    })()}
+
+                    {/* 各セグメントの終点 */}
                     {result.segments.map((seg, i) => (
                         <div key={i} className={`nc-line ${seg.type}`}>
-                            <span className="nc-line-num">N{(i + 1) * 10}</span>
+                            <span className="nc-line-num">N{(i + 1) * 10 + 5}</span>
                             <span className="nc-command">{formatNCLine(seg)}</span>
                         </div>
                     ))}
+
                     {/* ノーズR補正キャンセル */}
                     {machineSettings.noseRCompensation.enabled && (
                         <div className="nc-line compensation">
-                            <span className="nc-line-num">N{(result.segments.length + 1) * 10}</span>
+                            <span className="nc-line-num">N{(result.segments.length + 1) * 10 + 5}</span>
                             <span className="nc-command">G40 ; 補正キャンセル</span>
                         </div>
                     )}
