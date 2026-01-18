@@ -34,11 +34,15 @@ export function ResultsView({
         return null
     }
 
-    // 全計算結果の座標を収集
+    // 全計算結果の座標を収集（補正座標があればそれを優先）
     const allCoords: { x: number; z: number }[] = []
     result.segments.forEach(seg => {
-        allCoords.push({ x: seg.startX, z: seg.startZ })
-        allCoords.push({ x: seg.endX, z: seg.endZ })
+        const startX = seg.compensated?.startX ?? seg.startX
+        const startZ = seg.compensated?.startZ ?? seg.startZ
+        const endX = seg.compensated?.endX ?? seg.endX
+        const endZ = seg.compensated?.endZ ?? seg.endZ
+        allCoords.push({ x: startX, z: startZ })
+        allCoords.push({ x: endX, z: endZ })
     })
 
     const xValues = allCoords.map(p => p.x / 2)
@@ -84,18 +88,24 @@ export function ResultsView({
     }[] = []
 
     result.segments.forEach((seg, i) => {
+        // 補正座標があればそれを優先使用
+        const startX = seg.compensated?.startX ?? seg.startX
+        const startZ = seg.compensated?.startZ ?? seg.startZ
+        const endX = seg.compensated?.endX ?? seg.endX
+        const endZ = seg.compensated?.endZ ?? seg.endZ
+
         if (i === 0) {
             allPoints.push({
-                x: seg.startX, z: seg.startZ,
-                svgX: toSvgX(seg.startZ), svgY: toSvgY(seg.startX / 2),
+                x: startX, z: startZ,
+                svgX: toSvgX(startZ), svgY: toSvgY(startX / 2),
                 label: '始点',
                 color: colors.cornerR,
                 index: 1
             })
         }
         allPoints.push({
-            x: seg.endX, z: seg.endZ,
-            svgX: toSvgX(seg.endZ), svgY: toSvgY(seg.endX / 2),
+            x: endX, z: endZ,
+            svgX: toSvgX(endZ), svgY: toSvgY(endX / 2),
             label: seg.type === 'corner-r' ? 'R' : seg.type === 'corner-c' ? 'C' : '',
             color: seg.type === 'corner-r' ? colors.cornerR
                 : seg.type === 'corner-c' ? colors.cornerC
@@ -239,24 +249,31 @@ export function ResultsView({
 
                     {/* セグメント描画 */}
                     {result.segments.map((seg, i) => {
-                        const x1 = toSvgX(seg.startZ)
-                        const y1 = toSvgY(seg.startX / 2)
-                        const x2 = toSvgX(seg.endZ)
-                        const y2 = toSvgY(seg.endX / 2)
+                        // 補正座標があればそれを優先使用
+                        const startZ = seg.compensated?.startZ ?? seg.startZ
+                        const startX = seg.compensated?.startX ?? seg.startX
+                        const endZ = seg.compensated?.endZ ?? seg.endZ
+                        const endX = seg.compensated?.endX ?? seg.endX
+                        const radius = seg.compensated?.radius ?? seg.radius
+
+                        const x1 = toSvgX(startZ)
+                        const y1 = toSvgY(startX / 2)
+                        const x2 = toSvgX(endZ)
+                        const y2 = toSvgY(endX / 2)
 
                         const color = seg.type === 'corner-r' ? colors.cornerR
                             : seg.type === 'corner-c' ? colors.cornerC
                                 : colors.line
 
-                        if (seg.type === 'corner-r' && seg.radius) {
+                        if (seg.type === 'corner-r' && radius) {
                             // SVGの円弧コマンドでR部を描画
                             // SVGのA(arc)コマンド: A rx ry x-axis-rotation large-arc-flag sweep-flag x y
 
                             // 半径をSVG座標に変換
                             const zRange = maxZ - minZ || 1
                             const xRange = maxX - minX || 1
-                            const svgRadiusX = (seg.radius / zRange) * (width - padding * 2)
-                            const svgRadiusY = (seg.radius / xRange) * (height - padding * 2)
+                            const svgRadiusX = (radius / zRange) * (width - padding * 2)
+                            const svgRadiusY = (radius / xRange) * (height - padding * 2)
 
                             // sweep-flag: 描写用の幾何学的な回転方向を使用
                             // SegmentResult.sweep は 0 (CCW) か 1 (CW)
