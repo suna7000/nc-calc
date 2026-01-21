@@ -98,46 +98,22 @@ export class CenterTrackCalculator {
             let px: number, pz: number
             if (i === 0) {
                 // 始端
-                const n = this.getNormalAt(profile[0], 'start')
-                const op = pToO((profile[0].startX / 2 + n.nx * this.noseR) * 2, profile[0].startZ + n.nz * this.noseR, this.noseR, this.toolType, this.dirX)
-                px = op.ox; pz = op.oz
+                // calculateCornerで既に補正Rで計算済み → 仮想刃先点O
+                // pToO変換も法線オフセットも不要
+                px = profile[0].startX
+                pz = profile[0].startZ
             } else if (i === profile.length) {
                 // 終端
                 const prev = profile[i - 1]
-                const n = this.getNormalAt(prev, 'end')
-                const op = pToO((prev.endX / 2 + n.nx * this.noseR) * 2, prev.endZ + n.nz * this.noseR, this.noseR, this.toolType, this.dirX)
-                px = op.ox; pz = op.oz
+                // calculateCornerで既に補正Rで計算済み → 仮想刃先点O
+                px = prev.endX
+                pz = prev.endZ
             } else {
-                // セグメント間の遷移点
+                // セグメント間遷移点
+                // calculateCornerで既に補正Rで計算済み → 仮想刃先点O
                 const prev = profile[i - 1]
-                const next = profile[i]
-
-                const n1 = this.getNormalAt(prev, 'end')
-                const n2 = this.getNormalAt(next, 'start')
-
-                const dot = Math.max(-1.0, Math.min(1.0, n1.nx * n2.nx + n1.nz * n2.nz))
-                const cosHalfSq = (1.0 + dot) / 2.0
-                const cosHalf = Math.sqrt(Math.max(0.001, cosHalfSq)) // 極小値をガード
-
-                // 投影距離のガード：鋭角（約140度以上の旋回）で補正が発散するのを物理的限界で止める
-                // 標準的なR0.4であれば 最大1.6mm 程度のシフトに制限
-                const dist = Math.min(this.noseR * 4.0, this.noseR / cosHalf)
-
-                let bx = n1.nx + n2.nx, bz = n1.nz + n2.nz
-                const blen = Math.sqrt(bx * bx + bz * bz)
-
-                // 平行または逆走の場合 (blenが極小) は、前のセグメントの法線を優先
-                if (blen < 1e-4) {
-                    bx = n1.nx
-                    bz = n1.nz
-                } else {
-                    bx /= blen
-                    bz /= blen
-                }
-
-                // 中心点 P の算出 (半径ベース計算して最後に pToO)
-                const op = pToO((prev.endX / 2 + bx * dist) * 2, prev.endZ + bz * dist, this.noseR, this.toolType, this.dirX)
-                px = op.ox; pz = op.oz
+                px = prev.endX
+                pz = prev.endZ
             }
             nodePoints.push({ x: px, z: pz })
         }
