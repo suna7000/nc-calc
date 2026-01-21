@@ -103,7 +103,34 @@ const dist = Math.min(noseR * 4.0, noseR / cosHalf)
 | 補正半径 | `R + noseR` | `R - noseR` |
 | 接点距離 | `R / tan(θ/2)` | `R × tan(θ)` |
 
-### 4.2 I/K値の計算
+**🔴 重要**: 上記の「補正半径」は、補正計算時（CenterTrackCalculator等）に使用します。
+形状展開時（calculateCorner等）では、**図面値のRをそのまま使用**してください。
+
+### 4.2 ワーク形状計算と補正の分離原則
+
+ノーズR補正の実装では、以下の2段階を厳密に分離する必要があります：
+
+**第1段階：形状展開（図面通り）**
+```typescript
+// calculateCorner() の役割
+const cornerR = 0.5  // 図面値（noseRを加算しない！）
+const tDist = cornerR / Math.tan(half)
+const entryZ = cornerZ + u1z * tDist
+```
+
+**第2段階：補正適用**
+```typescript
+// CenterTrackCalculator の役割
+const offsetR = isConvex ? (cornerR + noseR) : (cornerR - noseR)
+const compensatedZ = workZ + normalZ * noseR
+```
+
+この分離により：
+- ワーク形状は図面通りに正確に計算される
+- ノーズR補正は一箇所で統一的に適用される
+- 二重補正のバグを防止できる
+
+### 4.3 I/K値の計算
 
 ```typescript
 I = (centerX - startX) / 2  // 半径値！
