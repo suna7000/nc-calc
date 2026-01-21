@@ -677,21 +677,20 @@ function determineGCode(isLeftTurn: boolean, _type: 'kaku-r' | 'sumi-r', setting
 }
 
 /**
- * コーナー計算（ノーズR補正対応）
- * @param noseR ノーズR補正値（0の場合は補正なし）
- * @returns 補正後の接点座標、補正後Rなど
+ * コーナー計算（ノーズR補正を考慮した接点計算）
+ * 補正R（元R + noseR）で接点を計算する。
+ * CenterTrackCalculatorでは円弧半径の補正は行わない（すでに補正済み）。
  */
 function calculateCorner(p1: Point, p2: Point, p3: Point, noseR: number = 0): CornerCalculation | null {
     const originalSize = p2.corner.size
     if (originalSize <= 0) return null
 
-    // 補正R = 元のR + noseR（角Rの場合）/ 元のR - noseR（隅Rの場合）
-    // 角R（凸）: 工具が外側を回るので、R + noseR で計算
-    // 隅R（凹）: 工具が内側を回るので、R - noseR で計算
+    // 補正R = 元R + noseR（角Rの場合）/ 元R - noseR（隅Rの場合）
     const isConvex = p2.corner.type === 'kaku-r'
-    const compensatedSize = isConvex
+    const adjustedSize = isConvex
         ? originalSize + noseR
         : Math.max(0.001, originalSize - noseR)
+
 
     const v1x = (p1.x - p2.x) / 2, v1z = p1.z - p2.z
     const v2x = (p3.x - p2.x) / 2, v2z = p3.z - p2.z
@@ -711,23 +710,23 @@ function calculateCorner(p1: Point, p2: Point, p3: Point, noseR: number = 0): Co
     const angleBetween = Math.acos(Math.max(-1, Math.min(1, innerProduct)))
     const half = angleBetween / 2
 
-    // Rの自動調整 (Limit check) - 補正Rを使用
+    // Rの自動調整 (Limit check)
     // 角度が非常に小さい（直線に近い）場合、tan(half) が小さくなり、maxR が巨大になる。 
     // また half=0 の場合 tan(half)=0 になるためゼロ除算に注意。
-    let adjustedSize = compensatedSize
+    let finalSize = adjustedSize
     if (half > 0.0001) {
         const maxTDist = Math.min(l1, l2) * 0.99
         const maxR = maxTDist * Math.tan(half)
-        adjustedSize = Math.min(compensatedSize, maxR)
+        finalSize = Math.min(adjustedSize, maxR)
     } else {
         // 直線に近い場合はRを入れる余地がない
-        adjustedSize = 0
+        finalSize = 0
     }
 
     const bX = u1x + u2x, bZ = u1z + u2z, bL = Math.sqrt(bX * bX + bZ * bZ)
     if (bL < 1e-6) return null // 180度または0度の場合は計算不能
 
-    const cDist = adjustedSize / Math.sin(half), tDist = adjustedSize / Math.tan(half)
+    const cDist = finalSize / Math.sin(half), tDist = finalSize / Math.tan(half)
     const cX = p2.x / 2 + (bX / bL) * cDist, cZ = p2.z + (bZ / bL) * cDist
     const eX = p2.x / 2 + u1x * tDist, eZ = p2.z + u1z * tDist
     const xX = p2.x / 2 + u2x * tDist, xZ = p2.z + u2z * tDist
@@ -737,7 +736,7 @@ function calculateCorner(p1: Point, p2: Point, p3: Point, noseR: number = 0): Co
         i: round3(cX - eX), k: round3(cZ - eZ), centerX: round3(cX * 2), centerZ: round3(cZ),
         isLeftTurn: (u1x * u2z - u1z * u2x) > 0,
         distToVertex: round3(tDist),
-        adjustedRadius: round3(adjustedSize),
+        adjustedRadius: round3(finalSize),
         originalRadius: originalSize
     }
 }

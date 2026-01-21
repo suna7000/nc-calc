@@ -66,8 +66,9 @@ export function pToO(px: number, pz: number, noseR: number, toolType: number, di
 }
 
 export function calculateArcOffset(radius: number, isConvex: boolean, noseR: number): { compensatedRadius: number } {
-    const rc = isConvex ? (radius + noseR) : (radius - noseR)
-    return { compensatedRadius: round3(Math.max(1e-6, rc)) }
+    // calculateCornerで既に補正R（元R + noseR）で接点計算しているため、
+    // ここではさらに補正を加えない（二重補正を防ぐ）
+    return { compensatedRadius: round3(Math.max(1e-6, radius)) }
 }
 
 export function calculateCompensatedIK(startX: number, startZ: number, centerX: number, centerZ: number): { i: number; k: number } {
