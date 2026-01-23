@@ -40,7 +40,7 @@ describe('理論計算 vs 実装の比較', () => {
         }
 
         const machineSettings = {
-            toolPost: 'front' as const,
+            toolPost: 'rear' as const,
             cuttingDirection: '-z' as const,
             noseRCompensation: { enabled: true, method: 'geometric' as const, offsetNumber: 1, compensationDirection: 'auto' as const },
             toolLibrary: [{ id: 'tool1', name: 'Test', noseRadius: 0.4, toolTipNumber: 3, type: 'external' as const, hand: 'right' as const }],

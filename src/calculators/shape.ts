@@ -219,7 +219,7 @@ export function calculateShape(
                 corner: { type: 'none', size: 0 },
                 id: 'curr'
             }
-            const cornerCalc = calculateCorner(currentPointObj, nextPoint, afterNextPoint, noseR)
+            const cornerCalc = calculateCorner(currentPointObj, nextPoint, afterNextPoint)
 
             if (cornerCalc) {
                 results.push({
@@ -677,19 +677,15 @@ function determineGCode(isLeftTurn: boolean, _type: 'kaku-r' | 'sumi-r', setting
 }
 
 /**
- * コーナー計算（ノーズR補正を考慮した接点計算）
- * 補正R（元R + noseR）で接点を計算する。
- * CenterTrackCalculatorでは円弧半径の補正は行わない（すでに補正済み）。
+ * コーナー計算（純粋なワーク形状）
+ * @returns ワーク形状上の接点座標、Rなど
  */
-function calculateCorner(p1: Point, p2: Point, p3: Point, noseR: number = 0): CornerCalculation | null {
+function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | null {
     const originalSize = p2.corner.size
     if (originalSize <= 0) return null
 
-    // 補正R = 元R + noseR（角Rの場合）/ 元R - noseR（隅Rの場合）
-    const isConvex = p2.corner.type === 'kaku-r'
-    const adjustedSize = isConvex
-        ? originalSize + noseR
-        : Math.max(0.001, originalSize - noseR)
+    // ワーク形状そのものを計算（ノーズR補正なし）
+    const adjustedSize = originalSize
 
 
     const v1x = (p1.x - p2.x) / 2, v1z = p1.z - p2.z
