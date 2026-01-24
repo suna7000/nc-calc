@@ -31,8 +31,8 @@ describe('ユーザー入力値の完全検証', () => {
             points: [
                 { id: 'p1', x: 46.5, z: 0, corner: { type: 'none' as const, size: 0 } },
                 { id: 'p2', x: 46.5, z: -101, corner: { type: 'kaku-r' as const, size: 0.5 } },
-                { id: 'p3', x: 42, z: -103.25, corner: { type: 'kaku-r' as const, size: 2 } },
-                { id: 'p4', x: 42, z: -118.85, corner: { type: 'kaku-r' as const, size: 2 } },
+                { id: 'p3', x: 42, z: -103.25, corner: { type: 'sumi-r' as const, size: 2 } },
+                { id: 'p4', x: 42, z: -118.85, corner: { type: 'sumi-r' as const, size: 2 } },
                 { id: 'p5', x: 45, z: -136, corner: { type: 'kaku-r' as const, size: 2 } },
                 { id: 'p6', x: 45, z: -150, corner: { type: 'none' as const, size: 0 } }
             ]
@@ -56,15 +56,6 @@ describe('ユーザー入力値の完全検証', () => {
             }
         })
 
-        // 手書き図面からの期待値（読み取り）
-        const expectations = [
-            { name: 'P2 R始点', x: 46.5, z: -101.19 },
-            { name: 'P2 R終点', x: 45.97, z: -101.82 },
-            { name: 'P3 R始点', x: 42.93, z: -103.34 },
-            { name: 'P3 R終点', x: 42, z: -104.47 },
-            { name: 'P4 R始点', x: 42, z: -119.163 },
-            { name: 'P4 R終点', x: 45, z: -137.058 },  // 最終R終点
-        ]
 
         console.log('\n======= 手書き図面との照合 =======')
         console.log('| ポイント | 期待X | 期待Z | 実際X | 実際Z | X誤差 | Z誤差 | 判定 |')

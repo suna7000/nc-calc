@@ -98,7 +98,6 @@ export class CenterTrackCalculator {
             let px: number, pz: number
             if (i === 0) {
                 // 始端: O=V となるように P を逆算して固定
-                // P = V + V_offset * dirX
                 const v = this.getVOffset()
                 px = profile[0].startX / 2 + v.dx * this.dirX
                 pz = profile[0].startZ + v.dz
