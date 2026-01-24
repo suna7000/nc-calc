@@ -90,63 +90,45 @@ export class CenterTrackCalculator {
     calculate(profile: Segment[]): CompensatedSegment[] {
         if (profile.length === 0) return []
 
-        // 1. 各ノード（接続点）の補正座標 P を先に求める
-        const nodePoints: { x: number, z: number }[] = []
+        // 1. 各ノード（接続点）の工具中心点 P (半径値/座標) を求める
+        // ここの P はチップ番号に依存しない幾何学的な純粋中心
+        const P_points: { x: number, z: number }[] = []
 
         for (let i = 0; i <= profile.length; i++) {
             let px: number, pz: number
             if (i === 0) {
-                // 始端
-                const n = this.getNormalAt(profile[0], 'start')
-                const op = pToO((profile[0].startX / 2 + n.nx * this.noseR) * 2, profile[0].startZ + n.nz * this.noseR, this.noseR, this.toolType, this.dirX)
-                px = op.ox; pz = op.oz
+                // 始端: O=V となるように P を逆算して固定
+                // P = V + V_offset * dirX
+                const v = this.getVOffset()
+                px = profile[0].startX / 2 + v.dx * this.dirX
+                pz = profile[0].startZ + v.dz
             } else if (i === profile.length) {
-                // 終端
+                // 終端: O=V となるように P を逆算して固定
                 const prev = profile[i - 1]
-                const n = this.getNormalAt(prev, 'end')
-                const op = pToO((prev.endX / 2 + n.nx * this.noseR) * 2, prev.endZ + n.nz * this.noseR, this.noseR, this.toolType, this.dirX)
-                px = op.ox; pz = op.oz
+                const v = this.getVOffset()
+                px = prev.endX / 2 + v.dx * this.dirX
+                pz = prev.endZ + v.dz
             } else {
                 // セグメント間の遷移点
                 const prev = profile[i - 1]
                 const next = profile[i]
-
                 const n1 = this.getNormalAt(prev, 'end')
                 const n2 = this.getNormalAt(next, 'start')
 
-                const dot = Math.max(-1.0, Math.min(1.0, n1.nx * n2.nx + n1.nz * n2.nz))
-                const cosHalfSq = (1.0 + dot) / 2.0
-                const cosHalf = Math.sqrt(Math.max(0.001, cosHalfSq)) // 極小値をガード
-
-                // 投影距離のガード：鋭角（約140度以上の旋回）で補正が発散するのを物理的限界で止める
-                // 標準的なR0.4であれば 最大1.6mm 程度のシフトに制限
-                const dist = Math.min(this.noseR * 4.0, this.noseR / cosHalf)
-
-                let bx = n1.nx + n2.nx, bz = n1.nz + n2.nz
-                const blen = Math.sqrt(bx * bx + bz * bz)
-
-                // 平行または逆走の場合 (blenが極小) は、前のセグメントの法線を優先
-                if (blen < 1e-4) {
-                    bx = n1.nx
-                    bz = n1.nz
-                } else {
-                    bx /= blen
-                    bz /= blen
-                }
-
-                // 中心点 P の算出 (半径ベース計算して最後に pToO)
-                const op = pToO((prev.endX / 2 + bx * dist) * 2, prev.endZ + bz * dist, this.noseR, this.toolType, this.dirX)
-                px = op.ox; pz = op.oz
+                const { dist, bx, bz } = this.calculateBisector(n1, n2)
+                px = prev.endX / 2 + bx * dist
+                pz = prev.endZ + bz * dist
             }
-            nodePoints.push({ x: px, z: pz })
+            P_points.push({ x: px, z: pz })
         }
 
-        // 2. セグメントを構築
+        // 2. セグメント構築時に、各中心点 P をプログラム点 O に変換して適用
         const result: CompensatedSegment[] = []
         for (let i = 0; i < profile.length; i++) {
             const seg = profile[i]
-            const startNode = nodePoints[i]
-            const endNode = nodePoints[i + 1]
+            // 各セグメントの始端 P と終端 P を一括変換
+            const oStart = pToO(P_points[i].x * 2, P_points[i].z, this.noseR, this.toolType, this.dirX)
+            const oEnd = pToO(P_points[i + 1].x * 2, P_points[i + 1].z, this.noseR, this.toolType, this.dirX)
 
             let cRadius = seg.radius
             if (seg.type === 'arc' && seg.radius !== undefined) {
@@ -156,18 +138,55 @@ export class CenterTrackCalculator {
 
             const compSeg: CompensatedSegment = {
                 ...seg,
-                compensatedStartX: round3(startNode.x), compensatedStartZ: round3(startNode.z),
-                compensatedEndX: round3(endNode.x), compensatedEndZ: round3(endNode.z),
+                compensatedStartX: oStart.ox, compensatedStartZ: oStart.oz,
+                compensatedEndX: oEnd.ox, compensatedEndZ: oEnd.oz,
                 compensatedRadius: cRadius !== undefined ? round3(cRadius) : undefined,
                 compensatedCenterX: seg.centerX, compensatedCenterZ: seg.centerZ
             }
             if (seg.type === 'arc' && seg.centerX !== undefined && seg.centerZ !== undefined) {
-                const ik = calculateCompensatedIK(startNode.x, startNode.z, seg.centerX, seg.centerZ)
+                // I, K は補正後の始点（座標系依存なし）と中心の相対位置
+                // プログラム上の始点 O と中心 C の関係を計算
+                const ik = calculateCompensatedIK(oStart.ox, oStart.oz, seg.centerX, seg.centerZ)
                 compSeg.compensatedI = ik.i; compSeg.compensatedK = ik.k
             }
             result.push(compSeg)
         }
         return result
+    }
+
+    private calculateBisector(n1: { nx: number, nz: number }, n2: { nx: number, nz: number }): { dist: number, bx: number, bz: number } {
+        const dot = Math.max(-1.0, Math.min(1.0, n1.nx * n2.nx + n1.nz * n2.nz))
+        const cosHalfSq = (1.0 + dot) / 2.0
+        const cosHalf = Math.sqrt(Math.max(0.001, cosHalfSq))
+
+        const dist = Math.min(this.noseR * 4.0, this.noseR / cosHalf)
+
+        let bx = n1.nx + n2.nx, bz = n1.nz + n2.nz
+        const blen = Math.sqrt(bx * bx + bz * bz)
+
+        if (blen < 1e-4) {
+            bx = n1.nx; bz = n1.nz
+        } else {
+            bx /= blen; bz /= blen
+        }
+        return { dist, bx, bz }
+    }
+
+    private getVOffset(): { dx: number, dz: number } {
+        let dx = 0, dz = 0
+        switch (this.toolType) {
+            case 1: dx = -this.noseR; dz = this.noseR; break
+            case 2: dx = -this.noseR; dz = -this.noseR; break
+            case 3: dx = this.noseR; dz = this.noseR; break
+            case 4: dx = this.noseR; dz = -this.noseR; break
+            case 5: dx = 0; dz = this.noseR; break
+            case 6: dx = -this.noseR; dz = 0; break
+            case 7: dx = 0; dz = -this.noseR; break
+            case 8: dx = this.noseR; dz = 0; break
+            case 9: dx = 0; dz = 0; break
+            default: dx = this.noseR; dz = this.noseR
+        }
+        return { dx, dz }
     }
 
     private getNormalAt(seg: Segment, pos: 'start' | 'end'): { nx: number; nz: number } {
