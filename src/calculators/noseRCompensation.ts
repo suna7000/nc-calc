@@ -210,7 +210,7 @@ export class CenterTrackCalculator {
         // 内径加工: nx < 0 がワークから離れる方向
         return {
             nx: rawNx * (this.sideSign * this.dirX),
-            nz: rawNz * (this.sideSign)
+            nz: rawNz * this.sideSign
         }
     }
 }
