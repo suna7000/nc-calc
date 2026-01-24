@@ -414,14 +414,18 @@ export function ResultsView({
                         <tr>
                             <th>No</th>
                             <th>種類</th>
+                            <th>X（始点）</th>
+                            <th>Z（始点）</th>
                             <th>X（終点）</th>
                             <th>Z（終点）</th>
                             <th>I</th>
                             <th>K</th>
                             {machineSettings.noseRCompensation.enabled && (
                                 <>
-                                    <th className="compensated">補正X</th>
-                                    <th className="compensated">補正Z</th>
+                                    <th className="compensated">補正X（始）</th>
+                                    <th className="compensated">補正Z（始）</th>
+                                    <th className="compensated">補正X（終）</th>
+                                    <th className="compensated">補正Z（終）</th>
                                     <th className="advanced">Smid補正量</th>
                                 </>
                             )}
@@ -436,12 +440,20 @@ export function ResultsView({
                                         {getTypeLabel(seg.type)}
                                     </span>
                                 </td>
+                                <td className="mono">{seg.startX.toFixed(3)}</td>
+                                <td className="mono">{seg.startZ.toFixed(3)}</td>
                                 <td className="mono highlight">{seg.endX.toFixed(3)}</td>
                                 <td className="mono highlight">{seg.endZ.toFixed(3)}</td>
                                 <td className="mono">{seg.i?.toFixed(3) ?? '-'}</td>
                                 <td className="mono">{seg.k?.toFixed(3) ?? '-'}</td>
                                 {machineSettings.noseRCompensation.enabled && (
                                     <>
+                                        <td className="mono compensated">
+                                            {seg.compensated?.startX?.toFixed(3) ?? '-'}
+                                        </td>
+                                        <td className="mono compensated">
+                                            {seg.compensated?.startZ?.toFixed(3) ?? '-'}
+                                        </td>
                                         <td className="mono compensated">
                                             {seg.compensated?.endX?.toFixed(3) ?? '-'}
                                         </td>

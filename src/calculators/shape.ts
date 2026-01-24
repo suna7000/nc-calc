@@ -813,8 +813,9 @@ function calculateAdjacentCorners(p1: Point, p2: Point, p3: Point, p4: Point): a
         const x3 = p3.x / 2 + n3.x * s3 * R2
 
         const h = Math.abs(x3 - x1)
-        // 半径の合計が段差より大きい場合、S字接続を適用
-        if (h < targetDist) {
+        // Mazatrol的なS字自動計算は、頂点間が非常に近く、かつ段差(h)が半径合計より小さい場合のみ（余裕がない場合）
+        // 頂点間距離 (l2) が R1+R2 より長い、または h が R1+R2 に近い場合はマージしない
+        if (h < targetDist * 0.95 && l2 < targetDist * 1.1) {
             const dz_total = Math.sqrt(targetDist * targetDist - h * h)
 
             // Zの配分 (半径比)

@@ -812,7 +812,7 @@ export function ShapeBuilder() {
                             <span className="point-coords">X{point.x} Z{point.z}</span>
                             {point.corner.type !== 'none' && (
                                 <span className="corner-badge">
-                                    {point.corner.type === 'sumi-r' ? `雅R${point.corner.size}`
+                                    {point.corner.type === 'sumi-r' ? `隅R${point.corner.size}`
                                         : point.corner.type === 'kaku-r' ? `角R${point.corner.size}`
                                             : `角C${point.corner.size}`}
                                 </span>

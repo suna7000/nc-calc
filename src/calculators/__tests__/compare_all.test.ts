@@ -65,26 +65,29 @@ describe('理論計算 vs 実装の比較', () => {
         console.log('3. 下りテーパーR始点: X42.93 Z-103.34')
         console.log('4. 下りテーパーR終点: X42 Z-104.47 R1.6')
 
-        // ======= 比較表 =======
-        console.log('\n======= 比較表 =======')
-        console.log('| 項目 | 理論計算 | アプリ出力 | ユーザー期待値 |')
-        console.log('|------|----------|-----------|--------------|')
-        console.log(`| R始点(B点)Z | ${bPointZ.toFixed(3)} | ${result.segments[0].endZ.toFixed(3)} | -101.19 |`)
+        // ======= 比較表（補正座標 vs ユーザー期待値） =======
+        console.log('\n======= 比較表（補正座標を使用） =======')
+        console.log('| 項目 | アプリ補正出力 | ユーザー期待値 | 誤差 |')
+        console.log('|------|--------------|--------------|------|')
 
+        const seg0 = result.segments[0]
         const seg1 = result.segments[1]
-        console.log(`| R終点(A点)X | ${aPointX.toFixed(3)} | ${seg1.endX.toFixed(3)} | 45.97 |`)
-        console.log(`| R終点(A点)Z | ${aPointZ.toFixed(3)} | ${seg1.endZ.toFixed(3)} | -101.82 |`)
 
-        // 分析
-        console.log('\n======= 分析 =======')
-        console.log('理論計算とユーザー期待値の差:')
-        console.log(`  R始点Z: ${bPointZ.toFixed(3)} vs -101.19 = 差${(bPointZ - (-101.19)).toFixed(3)}mm`)
-        console.log(`  R終点X: ${aPointX.toFixed(3)} vs 45.97 = 差${(aPointX - 45.97).toFixed(3)}mm ← ほぼ一致`)
-        console.log(`  R終点Z: ${aPointZ.toFixed(3)} vs -101.82 = 差${(aPointZ - (-101.82)).toFixed(3)}mm`)
+        // R始点 = Seg0の補正終点 または Seg1の補正始点
+        const compBPointZ = seg0.compensated?.endZ ?? seg0.endZ
+        const compAPointX = seg1.compensated?.endX ?? seg1.endX
+        const compAPointZ = seg1.compensated?.endZ ?? seg1.endZ
 
-        console.log('\nアプリ出力とユーザー期待値の差:')
-        console.log(`  R始点Z: ${result.segments[0].endZ.toFixed(3)} vs -101.19 = 差${(result.segments[0].endZ - (-101.19)).toFixed(3)}mm`)
-        console.log(`  R終点X: ${seg1.endX.toFixed(3)} vs 45.97 = 差${(seg1.endX - 45.97).toFixed(3)}mm`)
-        console.log(`  R終点Z: ${seg1.endZ.toFixed(3)} vs -101.82 = 差${(seg1.endZ - (-101.82)).toFixed(3)}mm`)
+        const diffBZ = compBPointZ - (-101.19)
+        const diffAX = compAPointX - 45.97
+        const diffAZ = compAPointZ - (-101.82)
+
+        console.log(`| R始点(B点)Z | ${compBPointZ.toFixed(3)} | -101.19 | ${diffBZ.toFixed(3)}mm ${Math.abs(diffBZ) < 0.05 ? '✅' : '❌'} |`)
+        console.log(`| R終点(A点)X | ${compAPointX.toFixed(3)} | 45.97 | ${diffAX.toFixed(3)}mm ${Math.abs(diffAX) < 0.05 ? '✅' : '❌'} |`)
+        console.log(`| R終点(A点)Z | ${compAPointZ.toFixed(3)} | -101.82 | ${diffAZ.toFixed(3)}mm ${Math.abs(diffAZ) < 0.05 ? '✅' : '❌'} |`)
+
+        // 精度判定
+        const allPassed = Math.abs(diffBZ) < 0.05 && Math.abs(diffAX) < 0.05 && Math.abs(diffAZ) < 0.05
+        console.log(`\n判定: ${allPassed ? '✅ 全項目が許容誤差 (0.05mm) 以内' : '❌ 許容誤差を超える項目あり'}`)
     })
 })
