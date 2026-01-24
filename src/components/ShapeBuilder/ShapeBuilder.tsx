@@ -53,7 +53,17 @@ export function ShapeBuilder() {
             const saved = localStorage.getItem('nc_calc_settings')
             if (saved) {
                 const parsed = JSON.parse(saved)
-                if (parsed.machine) setMachineSettings(parsed.machine)
+                if (parsed.machine) {
+                    // localStorage の古いデータに noseRCompensation がない場合にクラッシュを防ぐ
+                    setMachineSettings({
+                        ...defaultMachineSettings,
+                        ...parsed.machine,
+                        noseRCompensation: {
+                            ...defaultMachineSettings.noseRCompensation,
+                            ...(parsed.machine.noseRCompensation || {})
+                        }
+                    })
+                }
                 if (parsed.coordinates) setCoordSettings(parsed.coordinates)
             }
         }
