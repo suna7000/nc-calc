@@ -16,8 +16,9 @@ export function calculateTaperElement(params: {
     angleDeg: number;
     endX?: number;
     endZ?: number;
+    direction?: -1 | 1; // Zの進行方向 (-1: Z減少, 1: Z増加)
 }): { endX: number; endZ: number; length: number } | null {
-    const { startX, startZ, angleDeg, endX, endZ } = params;
+    const { startX, startZ, angleDeg, endX, endZ, direction = -1 } = params;
     const rad = (angleDeg * Math.PI) / 180;
 
     // Xは直径値なので、計算には半径値 (x/2) を使用する
@@ -28,7 +29,16 @@ export function calculateTaperElement(params: {
         const reX = endX / 2;
         const dx = reX - rsX;
         if (Math.abs(Math.tan(rad)) < 1e-10) return null;
-        const dz = dx / Math.tan(rad);
+
+        let dz = dx / Math.tan(rad);
+
+        // 幾何学的な dz が direction と逆向きなら反転させる
+        // 例: angle=5, dx=+1.5 (半径差) -> dz=+17.14
+        // これを加工方向 (-z) に合わせる
+        if ((dz > 0 && direction < 0) || (dz < 0 && direction > 0)) {
+            dz = -dz;
+        }
+
         const finalZ = startZ + dz;
         const length = Math.sqrt(dx * dx + dz * dz);
         return { endX, endZ: round3(finalZ), length: round3(length) };

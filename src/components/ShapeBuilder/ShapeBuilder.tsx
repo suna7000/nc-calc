@@ -258,7 +258,8 @@ export function ShapeBuilder() {
                 startX: lastPoint.x,
                 startZ: lastPoint.z,
                 angleDeg: angle,
-                endZ: z
+                endZ: z,
+                direction: machineSettings.cuttingDirection === '-z' ? -1 : 1
             })
             if (res) setInputX(res.endX.toString())
         } else {
@@ -268,7 +269,8 @@ export function ShapeBuilder() {
                 startX: lastPoint.x,
                 startZ: lastPoint.z,
                 angleDeg: angle,
-                endX: x
+                endX: x,
+                direction: machineSettings.cuttingDirection === '-z' ? -1 : 1
             })
             if (res) setInputZ(res.endZ.toString())
         }
@@ -524,6 +526,34 @@ export function ShapeBuilder() {
             {/* プレビュー */}
             <div className="preview-section">
                 <ShapePreview shape={shape} settings={coordSettings} />
+            </div>
+
+            {/* クイック設定パネル (メインUIに露出) */}
+            <div className="quick-settings-bar">
+                <div className="quick-setting-item">
+                    <label className="toggle-label">
+                        <input
+                            type="checkbox"
+                            checked={machineSettings.noseRCompensation.enabled}
+                            onChange={(e) => setMachineSettings({
+                                ...machineSettings,
+                                noseRCompensation: { ...machineSettings.noseRCompensation, enabled: e.target.checked }
+                            })}
+                        />
+                        <span className="label-text">ノーズR補正 (G41/G42)</span>
+                    </label>
+                </div>
+                {machineSettings.activeToolId && (
+                    <div className="quick-tool-info">
+                        <span className="tool-badge">
+                            {machineSettings.toolLibrary.find(t => t.id === machineSettings.activeToolId)?.name}
+                            (R{machineSettings.toolLibrary.find(t => t.id === machineSettings.activeToolId)?.noseRadius})
+                        </span>
+                        <button className="btn-text-small" onClick={() => setShowSettings(true)}>
+                            工具変更
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* 点追加フォーム */}
