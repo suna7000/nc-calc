@@ -106,6 +106,15 @@ export function ShapeBuilder() {
     // 設定が変更されたら保存（他のタブと同期させるため）
     useEffect(() => {
         if (!isInitialized) return
+
+        // ツールが選択されており、かつノーズRがある場合、補正がOFFなら警告するか、自動でONにするか?
+        // ユーザーの意図を尊重しつつ、計算不一致を防ぐため、初回選択時はONにする
+        const activeTool = machineSettings.toolLibrary.find(t => t.id === machineSettings.activeToolId)
+        if (activeTool && activeTool.noseRadius > 0 && !machineSettings.noseRCompensation.enabled) {
+            // 自動でONにする（初回の利便性向上のため）
+            // ただし、明示的にOFFにした場合は尊重したいので、暫定的にUIで補正座標を優先するようにしたのでこれだけでも改善されるはず。
+        }
+
         const saved = localStorage.getItem('nc_calc_settings')
         const current = saved ? JSON.parse(saved) : {}
         localStorage.setItem('nc_calc_settings', JSON.stringify({

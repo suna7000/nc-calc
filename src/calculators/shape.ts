@@ -386,8 +386,7 @@ export function calculateShape(
             const calculator = new CenterTrackCalculator(
                 noseR,
                 !isInternal,
-                activeTool.toolTipNumber || 3,
-                machineSettings.toolPost
+                activeTool.toolTipNumber || 3
             )
             const compensatedSegments = calculator.calculate(profile)
 
@@ -404,12 +403,12 @@ export function calculateShape(
                     k: comp.compensatedK
                 }
 
-                // 高度な情報（fx, fz）も表示用にセット（旧来の互換性のため）
+                // 高度な情報（fx, fz）も表示用にセット
                 if (seg.type === 'line' && seg.angle !== undefined) {
                     seg.advancedInfo = {
                         ...seg.advancedInfo,
                         manualShiftX: round3(comp.compensatedEndX - seg.endX),
-                        manualShiftZ: round3(seg.endZ - comp.compensatedEndZ)
+                        manualShiftZ: round3(comp.compensatedEndZ - seg.endZ)
                     }
                 }
             })
@@ -864,14 +863,24 @@ function calculateAdjacentCorners(p1: Point, p2: Point, p3: Point, p4: Point): a
 export function formatResults(result: ShapeCalculationResult): string[] {
     return result.segments.map(seg => {
         let line = `${seg.index}. `
+
+        // 補正座標があればそれを優先、なければ元座標を使用
+        const startX = seg.compensated?.startX ?? seg.startX
+        const startZ = seg.compensated?.startZ ?? seg.startZ
+        const endX = seg.compensated?.endX ?? seg.endX
+        const endZ = seg.compensated?.endZ ?? seg.endZ
+        const i = seg.compensated?.i ?? seg.i
+        const k = seg.compensated?.k ?? seg.k
+        const radius = seg.compensated?.radius ?? seg.radius
+
         if (seg.type === 'line') {
-            line += `直線: X${seg.startX} Z${seg.startZ} → X${seg.endX} Z${seg.endZ}`
+            line += `直線: X${startX.toFixed(3)} Z${startZ.toFixed(3)} → X${endX.toFixed(3)} Z${endZ.toFixed(3)}`
             if (seg.angle !== undefined && seg.angle > 0) line += ` (${seg.angle}°)`
         } else if (seg.type === 'corner-r') {
-            line += `R${seg.radius}: X${seg.endX} Z${seg.endZ}`
-            if (seg.i !== undefined) line += ` I${seg.i} K${seg.k} (${seg.gCode})`
+            line += `R${radius?.toFixed(3)}: X${endX.toFixed(3)} Z${endZ.toFixed(3)}`
+            if (i !== undefined) line += ` I${i.toFixed(3)} K${k?.toFixed(3)} (${seg.gCode})`
         } else if (seg.type === 'corner-c') {
-            line += `C面: X${seg.startX} Z${seg.startZ} → X${seg.endX} Z${seg.endZ}`
+            line += `C面: X${startX.toFixed(3)} Z${startZ.toFixed(3)} → X${endX.toFixed(3)} Z${endZ.toFixed(3)}`
         }
         return line
     })

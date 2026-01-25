@@ -414,21 +414,24 @@ export function ResultsView({
                         <tr>
                             <th>No</th>
                             <th>種類</th>
-                            <th>X（始点）</th>
-                            <th>Z（始点）</th>
-                            <th>X（終点）</th>
-                            <th>Z（終点）</th>
-                            <th>I</th>
-                            <th>K</th>
-                            {machineSettings.noseRCompensation.enabled && (
+                            {machineSettings.noseRCompensation.enabled ? (
                                 <>
-                                    <th className="compensated">補正X（始）</th>
-                                    <th className="compensated">補正Z（始）</th>
-                                    <th className="compensated">補正X（終）</th>
-                                    <th className="compensated">補正Z（終）</th>
-                                    <th className="advanced">Smid補正量</th>
+                                    <th className="compensated">プログラムX（始）</th>
+                                    <th className="compensated">プログラムZ（始）</th>
+                                    <th className="compensated">プログラムX（終）</th>
+                                    <th className="compensated">プログラムZ（終）</th>
+                                    <th className="compensated">I / K</th>
+                                </>
+                            ) : (
+                                <>
+                                    <th>X（始点）</th>
+                                    <th>Z（始点）</th>
+                                    <th>X（終点）</th>
+                                    <th>Z（終点）</th>
+                                    <th>I / K</th>
                                 </>
                             )}
+                            <th className="advanced">設計(幾何)座標 / シフト量</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -440,44 +443,23 @@ export function ResultsView({
                                         {getTypeLabel(seg.type)}
                                     </span>
                                 </td>
-                                <td className="mono">{seg.startX.toFixed(3)}</td>
-                                <td className="mono">{seg.startZ.toFixed(3)}</td>
-                                <td className="mono highlight">{seg.endX.toFixed(3)}</td>
-                                <td className="mono highlight">{seg.endZ.toFixed(3)}</td>
-                                <td className="mono">{seg.i?.toFixed(3) ?? '-'}</td>
-                                <td className="mono">{seg.k?.toFixed(3) ?? '-'}</td>
-                                {machineSettings.noseRCompensation.enabled && (
-                                    <>
-                                        <td className="mono compensated">
-                                            {seg.compensated?.startX?.toFixed(3) ?? '-'}
-                                        </td>
-                                        <td className="mono compensated">
-                                            {seg.compensated?.startZ?.toFixed(3) ?? '-'}
-                                        </td>
-                                        <td className="mono compensated">
-                                            {seg.compensated?.endX?.toFixed(3) ?? '-'}
-                                        </td>
-                                        <td className="mono compensated">
-                                            {seg.compensated?.endZ?.toFixed(3) ?? '-'}
-                                        </td>
-                                        <td className="advanced-info-cell">
-                                            {/* Peter Smid 方式 */}
-                                            {seg.advancedInfo?.manualShiftX !== undefined && (
-                                                <div className="smid-shifts" title="Peter Smid方式 手計算用シフト量">
-                                                    <span className="label">Smid Δ</span>
-                                                    <span>X:{seg.advancedInfo.manualShiftX.toFixed(3)} Z:{seg.advancedInfo.manualShiftZ?.toFixed(3)}</span>
-                                                </div>
-                                            )}
+                                {/* メインの座標列：補正が有効なら補正後を表示 */}
+                                <td className="mono highlight-comp">{(seg.compensated?.startX ?? seg.startX).toFixed(3)}</td>
+                                <td className="mono highlight-comp">{(seg.compensated?.startZ ?? seg.startZ).toFixed(3)}</td>
+                                <td className="mono highlight-comp">{(seg.compensated?.endX ?? seg.endX).toFixed(3)}</td>
+                                <td className="mono highlight-comp">{(seg.compensated?.endZ ?? seg.endZ).toFixed(3)}</td>
+                                <td className="mono">
+                                    {seg.compensated?.i !== undefined ? `I${seg.compensated.i.toFixed(3)} K${seg.compensated.k?.toFixed(3)}`
+                                        : (seg.i !== undefined ? `I${seg.i.toFixed(3)} K${seg.k?.toFixed(3)}` : '-')}
+                                </td>
 
-                                            {/* 工場長のネタ帳（HP）方式 */}
-                                            {seg.advancedInfo?.hpShiftX !== undefined && (
-                                                <div className="hp-shifts" title="工場長のネタ帳方式 手計算用補正量">
-                                                    <span className="label">ネタ帳 f</span>
-                                                    <span>X:{seg.advancedInfo.hpShiftX.toFixed(3)} Z:{seg.advancedInfo.hpShiftZ?.toFixed(3)}</span>
-                                                </div>
-                                            )}
-
-                                            {/* 交点・接点情報 */}
+                                <td className="advanced-info-cell">
+                                    <div className="geo-info">
+                                        <span className="label">設計:</span>
+                                        X{seg.startX.toFixed(3)} Z{seg.startZ.toFixed(3)} → X{seg.endX.toFixed(3)} Z{seg.endZ.toFixed(3)}
+                                    </div>
+                                    {machineSettings.noseRCompensation.enabled && (
+                                        <>
                                             {seg.advancedInfo?.distToVertex !== undefined && (
                                                 <div className="vertex-info" title="仮想交点からの戻り量 (L)">
                                                     <span>カド戻りL: {seg.advancedInfo.distToVertex.toFixed(3)}</span>
@@ -488,9 +470,9 @@ export function ResultsView({
                                                     <span>接点: X{seg.advancedInfo.tangentX.toFixed(3)}</span>
                                                 </div>
                                             )}
-                                        </td>
-                                    </>
-                                )}
+                                        </>
+                                    )}
+                                </td>
                             </tr>
                         ))}
                     </tbody>

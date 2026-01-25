@@ -152,7 +152,7 @@ export const defaultTools: Tool[] = [
 ]
 
 export const defaultMachineSettings: MachineSettings = {
-    toolPost: 'front',
+    toolPost: 'rear',
     cuttingDirection: '-z',
     activeToolId: 't02',
     toolLibrary: defaultTools,
