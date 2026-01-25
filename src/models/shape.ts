@@ -32,11 +32,19 @@ export interface CornerTreatment {
 }
 
 
-// 座標点（隅処理情報を含む）
+// 要素タイプ
+export type SegmentElementType = 'line' | 'arc'
+
+// 座標点（隅処理＋要素タイプを含む）
 export interface Point {
     id: string
     x: number  // 直径値
     z: number
+    // この点に到達する際の要素タイプ
+    type: SegmentElementType
+    // 円弧（type='arc'）の場合のパラメータ
+    arcRadius?: number
+    isConvex?: boolean
     // この点に到達する際の隅処理（MAZATROL の F corner に相当）
     corner: CornerTreatment
     // この点の後に溝を挿入する場合
@@ -78,17 +86,30 @@ export interface Shape {
     points: Point[]
 }
 
-// 新しい点を作成
+// 新しい点を作成（第3引数にtypeまたはcornerを受け取れるようにして後方互換性を維持）
 export function createPoint(
     x: number,
     z: number,
-    corner: CornerTreatment = { type: 'none', size: 0 }
+    typeOrCorner: SegmentElementType | CornerTreatment = 'line',
+    corner?: CornerTreatment
 ): Point {
+    let type: SegmentElementType = 'line'
+    let finalCorner: CornerTreatment = { type: 'none', size: 0 }
+
+    if (typeof typeOrCorner === 'string') {
+        type = typeOrCorner
+        if (corner) finalCorner = corner
+    } else {
+        finalCorner = typeOrCorner
+        // type はデフォルトの 'line' となる
+    }
+
     return {
         id: crypto.randomUUID(),
         x,
         z,
-        corner
+        type,
+        corner: finalCorner
     }
 }
 

@@ -6,6 +6,7 @@ export interface CoordinateSettings {
     zLabel: string      // Z軸のラベル（Z, W など）
     diameterMode: boolean // true: 直径指定（通常）, false: 半径指定
     decimalPlaces: 1 | 2 | 3 | 4 // 小数点桁数
+    arcOutputMode: 'R' | 'IK'   // 円弧出力形式
 }
 
 // 刃先番号（仮想刃先点番号）
@@ -90,7 +91,8 @@ export const defaultCoordinateSettings: CoordinateSettings = {
     xLabel: 'X',
     zLabel: 'Z',
     diameterMode: true,
-    decimalPlaces: 3
+    decimalPlaces: 3,
+    arcOutputMode: 'R'
 }
 
 
@@ -220,7 +222,8 @@ export const presets: Record<string, CoordinateSettings> = {
         xLabel: 'X',
         zLabel: 'Z',
         diameterMode: true,
-        decimalPlaces: 3
+        decimalPlaces: 3,
+        arcOutputMode: 'R'
     },
     mazak: {
         xDirection: 1,
@@ -228,7 +231,8 @@ export const presets: Record<string, CoordinateSettings> = {
         xLabel: 'X',
         zLabel: 'Z',
         diameterMode: true,
-        decimalPlaces: 3
+        decimalPlaces: 3,
+        arcOutputMode: 'R'
     },
     fanuc: {
         xDirection: 1,
@@ -236,6 +240,7 @@ export const presets: Record<string, CoordinateSettings> = {
         xLabel: 'X',
         zLabel: 'Z',
         diameterMode: true,
-        decimalPlaces: 3
+        decimalPlaces: 3,
+        arcOutputMode: 'R'
     }
 }

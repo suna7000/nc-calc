@@ -33,9 +33,9 @@ describe('理論計算 vs 実装の比較', () => {
         // ======= アプリ実装 =======
         const shape = {
             points: [
-                { id: '1', x: 46.5, z: 0, corner: { type: 'none' as const, size: 0 } },
-                { id: '2', x: 46.5, z: -101, corner: { type: 'kaku-r' as const, size: 0.5 } },
-                { id: '3', x: 42, z: -103.25, corner: { type: 'none' as const, size: 0 } },
+                { id: '1', x: 46.5, z: 0, type: 'line' as const, corner: { type: 'none' as const, size: 0 } },
+                { id: '2', x: 46.5, z: -101, type: 'line' as const, corner: { type: 'kaku-r' as const, size: 0.5 } },
+                { id: '3', x: 42, z: -103.25, type: 'line' as const, corner: { type: 'none' as const, size: 0 } },
             ]
         }
 

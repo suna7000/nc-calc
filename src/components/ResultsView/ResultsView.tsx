@@ -393,7 +393,7 @@ export function ResultsView({
                     {result.segments.map((seg, i) => (
                         <div key={i} className={`nc-line ${seg.type}`}>
                             <span className="nc-line-num">N{(i + 1) * 10 + 5}</span>
-                            <span className="nc-command">{formatNCLine(seg)}</span>
+                            <span className="nc-command">{formatNCLine(seg, coordSettings)}</span>
                         </div>
                     ))}
 
@@ -482,16 +482,21 @@ export function ResultsView({
     )
 }
 
-function formatNCLine(seg: SegmentResult): string {
+function formatNCLine(seg: SegmentResult, coordSettings: CoordinateSettings): string {
     // 補正座標があれば優先、なければ元座標を使用
     const endX = seg.compensated?.endX ?? seg.endX
     const endZ = seg.compensated?.endZ ?? seg.endZ
     const i = seg.compensated?.i ?? seg.i
     const k = seg.compensated?.k ?? seg.k
+    const radius = seg.compensated?.radius ?? seg.radius
     const gCode = seg.gCode || (seg.type === 'corner-r' ? 'G03' : 'G01')
 
     if (seg.type === 'corner-r') {
-        return `${gCode} X${endX.toFixed(3)} Z${endZ.toFixed(3)} I${i?.toFixed(3)} K${k?.toFixed(3)}`
+        if (coordSettings.arcOutputMode === 'R' && radius !== undefined) {
+            return `${gCode} X${endX.toFixed(3)} Z${endZ.toFixed(3)} R${radius.toFixed(3)}`
+        } else {
+            return `${gCode} X${endX.toFixed(3)} Z${endZ.toFixed(3)} I${i?.toFixed(3)} K${k?.toFixed(3)}`
+        }
     } else if (seg.type === 'corner-c') {
         return `G01 X${endX.toFixed(3)} Z${endZ.toFixed(3)}`
     }

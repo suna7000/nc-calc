@@ -27,13 +27,13 @@ describe('手書き図面の全座標検証', () => {
 
         const shape = {
             points: [
-                { id: 'p1', x: 46.5, z: 0, corner: { type: 'none' as const, size: 0 } },
-                { id: 'p2', x: 46.5, z: -101.0, corner: { type: 'kaku-r' as const, size: 0.5 } },
-                { id: 'p3', x: 42.0, z: -103.807, corner: { type: 'sumi-r' as const, size: 2.0 } },
-                { id: 'p4', x: 42.0, z: -119.163, corner: { type: 'sumi-r' as const, size: 2.0 } },
-                { id: 'p5', x: 42.88, z: -131.88, corner: { type: 'kaku-r' as const, size: 2.0 } },
-                { id: 'p6', x: 45.0, z: -137.058, corner: { type: 'kaku-r' as const, size: 2.0 } },
-                { id: 'p7', x: 45.0, z: -149.208, corner: { type: 'none' as const, size: 0 } }
+                { id: 'p1', x: 46.5, z: 0, type: 'line' as const, corner: { type: 'none' as const, size: 0 } },
+                { id: 'p2', x: 46.5, z: -101.0, type: 'line' as const, corner: { type: 'kaku-r' as const, size: 0.5 } },
+                { id: 'p3', x: 42.0, z: -103.807, type: 'line' as const, corner: { type: 'sumi-r' as const, size: 2.0 } },
+                { id: 'p4', x: 42.0, z: -119.163, type: 'line' as const, corner: { type: 'sumi-r' as const, size: 2.0 } },
+                { id: 'p5', x: 42.88, z: -131.88, type: 'line' as const, corner: { type: 'kaku-r' as const, size: 2.0 } },
+                { id: 'p6', x: 45.0, z: -137.058, type: 'line' as const, corner: { type: 'kaku-r' as const, size: 2.0 } },
+                { id: 'p7', x: 45.0, z: -149.208, type: 'line' as const, corner: { type: 'none' as const, size: 0 } }
             ]
         }
 

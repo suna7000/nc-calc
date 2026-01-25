@@ -16,10 +16,10 @@ describe('隣接R（段差・隅R・角R）の計算検証', () => {
 
         const shape = {
             points: [
-                { id: 'p1', x: 100, z: 0, corner: { type: 'none' as const, size: 0 } },
-                { id: 'p2', x: 100, z: -10, corner: { type: 'sumi-r' as const, size: 10 } },
-                { id: 'p3', x: 95, z: -10, corner: { type: 'kaku-r' as const, size: 0.5 } },
-                { id: 'p4', x: 95, z: -20, corner: { type: 'none' as const, size: 0 } }
+                { id: 'p1', x: 100, z: 0, type: 'line' as const, corner: { type: 'none' as const, size: 0 } },
+                { id: 'p2', x: 100, z: -10, type: 'line' as const, corner: { type: 'sumi-r' as const, size: 10 } },
+                { id: 'p3', x: 95, z: -10, type: 'line' as const, corner: { type: 'kaku-r' as const, size: 0.5 } },
+                { id: 'p4', x: 95, z: -20, type: 'line' as const, corner: { type: 'none' as const, size: 0 } }
             ]
         }
 

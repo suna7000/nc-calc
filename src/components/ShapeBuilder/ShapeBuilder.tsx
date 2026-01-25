@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { Shape, CornerType, CornerTreatment, GrooveInsert } from '../../models/shape'
+import type { Shape, CornerType, CornerTreatment, GrooveInsert, Point } from '../../models/shape'
 import { createPoint, createEmptyShape, noCorner } from '../../models/shape'
 import { calculateShape, formatResults } from '../../calculators/shape'
 import { ShapePreview } from '../preview/ShapePreview'
@@ -46,6 +46,11 @@ export function ShapeBuilder() {
 
     // 点編集モード
     const [editingPointIndex, setEditingPointIndex] = useState<number | null>(null)
+
+    // 新規追加：要素タイプ
+    const [segmentType, setSegmentType] = useState<'line' | 'arc'>('line')
+    const [arcRadius, setArcRadius] = useState('')
+    const [isConvex, setIsConvex] = useState(true)
 
     // 初期化時にlocalStorageから読み込む
     useEffect(() => {
@@ -128,10 +133,18 @@ export function ShapeBuilder() {
         const xStr = inputX.trim()
         const zStr = inputZ.trim()
 
-        if (xStr === '' || zStr === '') return
+        if (xStr === '' && zStr === '' && shape.points.length > 0) return
+        if (xStr === '' && zStr === '' && shape.points.length === 0) return
 
-        const x = parseFloat(xStr)
-        const z = parseFloat(zStr)
+        let x = parseFloat(xStr)
+        let z = parseFloat(zStr)
+
+        // 入力省略の処理（前点から引き継ぐ）
+        if (shape.points.length > 0) {
+            const lastPoint = shape.points[shape.points.length - 1]
+            if (isNaN(x)) x = lastPoint.x
+            if (isNaN(z)) z = lastPoint.z
+        }
 
         if (isNaN(x) || isNaN(z)) return
 
@@ -159,7 +172,11 @@ export function ShapeBuilder() {
             }
         }
 
-        const newPoint = createPoint(x, z, corner)
+        const newPoint = createPoint(x, z, segmentType, corner)
+        if (segmentType === 'arc') {
+            newPoint.arcRadius = parseFloat(arcRadius) || 0
+            newPoint.isConvex = isConvex
+        }
 
         setShape(prev => {
             const newPoints = [...prev.points, newPoint]
@@ -178,6 +195,8 @@ export function ShapeBuilder() {
         setSecondArcType('kaku-r')
         setSecondArcSize('')
         setShowResults(false)
+        setSegmentType('line')
+        setArcRadius('')
 
         // フィードバックを2秒後にクリア
         setTimeout(() => setLastAddedIndex(null), 2000)
@@ -198,6 +217,9 @@ export function ShapeBuilder() {
             setSecondArcType(point.corner.secondArc.type)
             setSecondArcSize(point.corner.secondArc.size.toString())
         }
+        setSegmentType(point.type || 'line')
+        setArcRadius(point.arcRadius?.toString() || '')
+        setIsConvex(point.isConvex !== false)
         setShowGrooveForm(false)
         setShowResults(false)
     }
@@ -355,6 +377,41 @@ export function ShapeBuilder() {
         setTimeout(() => setLastAddedIndex(null), 2000)
     }
 
+    // ぬすみ（U-CUT）を一括挿入
+    const addNusumiPreset = () => {
+        if (shape.points.length === 0) return
+
+        const d = parseFloat(grooveDepth)
+        const w = parseFloat(grooveWidth)
+        const r = parseFloat(grooveBottomLeftR) // 戻りRとして流用
+        if (isNaN(d) || isNaN(w) || d <= 0 || w <= 0) return
+
+        const lastPoint = shape.points[shape.points.length - 1]
+
+        // 1. 直下落下の点
+        const p1 = createPoint(lastPoint.x - d * 2, lastPoint.z, 'line')
+
+        // 2. 底面終端
+        const p2 = createPoint(lastPoint.x - d * 2, lastPoint.z - w, 'line')
+
+        // 3. 戻り点（円弧または直線）
+        let p3: Point
+        if (!isNaN(r) && r > 0) {
+            p3 = createPoint(lastPoint.x, lastPoint.z - w - r, 'arc')
+            p3.arcRadius = r
+            p3.isConvex = false // 凹Rで戻る
+        } else {
+            p3 = createPoint(lastPoint.x, lastPoint.z - w, 'line')
+        }
+
+        setShape(prev => ({
+            ...prev,
+            points: [...prev.points, p1, p2, p3]
+        }))
+
+        setShowGrooveForm(false)
+    }
+
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
             addPoint()
@@ -413,6 +470,23 @@ export function ShapeBuilder() {
                                     onClick={() => setCoordSettings({ ...coordSettings, zDirection: -1 })}
                                 >
                                     +Z ←
+                                </button>
+                            </div>
+                        </div>
+                        <div className="setting-item">
+                            <label>円弧出力形式</label>
+                            <div className="toggle-buttons">
+                                <button
+                                    className={`toggle-btn ${coordSettings.arcOutputMode === 'R' ? 'active' : ''}`}
+                                    onClick={() => setCoordSettings({ ...coordSettings, arcOutputMode: 'R' })}
+                                >
+                                    R指令
+                                </button>
+                                <button
+                                    className={`toggle-btn ${coordSettings.arcOutputMode === 'IK' ? 'active' : ''}`}
+                                    onClick={() => setCoordSettings({ ...coordSettings, arcOutputMode: 'IK' })}
+                                >
+                                    IK指令
                                 </button>
                             </div>
                         </div>
@@ -641,6 +715,57 @@ export function ShapeBuilder() {
                     </div>
                 )}
 
+                {/* 形状タイプ選択 (直線/円弧) */}
+                <div className="element-type-section" style={{ marginTop: '1rem', marginBottom: '1.5rem', padding: '0.75rem', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <label style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)', marginBottom: '0.75rem', display: 'block' }}>点までの形状タイプ</label>
+                    <div className="segment-type-buttons">
+                        <button
+                            className={`type-btn ${segmentType === 'line' ? 'active' : ''}`}
+                            onClick={() => setSegmentType('line')}
+                        >
+                            直線
+                        </button>
+                        <button
+                            className={`type-btn ${segmentType === 'arc' ? 'active' : ''}`}
+                            onClick={() => setSegmentType('arc')}
+                        >
+                            円弧
+                        </button>
+                    </div>
+
+                    {segmentType === 'arc' && (
+                        <div className="arc-input-grid" style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            <div className="input-group">
+                                <label>半径(R)</label>
+                                <input
+                                    type="number"
+                                    className="step-input small"
+                                    value={arcRadius}
+                                    onChange={(e) => setArcRadius(e.target.value)}
+                                    placeholder="R10"
+                                />
+                            </div>
+                            <div className="input-group">
+                                <label>形状向き</label>
+                                <div className="toggle-buttons mini">
+                                    <button
+                                        className={`toggle-btn ${isConvex ? 'active' : ''}`}
+                                        onClick={() => setIsConvex(true)}
+                                    >
+                                        凸R
+                                    </button>
+                                    <button
+                                        className={`toggle-btn ${!isConvex ? 'active' : ''}`}
+                                        onClick={() => setIsConvex(false)}
+                                    >
+                                        凹R
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 {/* 角処理設定 */}
                 <div className="corner-section">
                     <label>この点の角処理</label>
@@ -832,9 +957,14 @@ export function ShapeBuilder() {
                                 />
                             </div>
                         </div>
-                        <button className="btn btn-primary" onClick={addGroove} style={{ marginTop: '0.5rem' }}>
-                            ✓ 溝を確定
-                        </button>
+                        <div className="groove-action-buttons" style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+                            <button className="btn btn-primary" onClick={addGroove}>
+                                ✓ 溝（点に付加）
+                            </button>
+                            <button className="btn btn-accent" onClick={addNusumiPreset} title="垂直に落ちて戻る3点を自動生成">
+                                ✨ ぬすみとして3点を追加
+                            </button>
+                        </div>
                     </div>
                 )}
 

@@ -29,12 +29,12 @@ describe('ユーザー入力値の完全検証', () => {
 
         const shape = {
             points: [
-                { id: 'p1', x: 46.5, z: 0, corner: { type: 'none' as const, size: 0 } },
-                { id: 'p2', x: 46.5, z: -101, corner: { type: 'kaku-r' as const, size: 0.5 } },
-                { id: 'p3', x: 42, z: -103.25, corner: { type: 'sumi-r' as const, size: 2 } },
-                { id: 'p4', x: 42, z: -118.85, corner: { type: 'sumi-r' as const, size: 2 } },
-                { id: 'p5', x: 45, z: -136, corner: { type: 'kaku-r' as const, size: 2 } },
-                { id: 'p6', x: 45, z: -150, corner: { type: 'none' as const, size: 0 } }
+                { id: 'p1', x: 46.5, z: 0, type: 'line' as const, corner: { type: 'none' as const, size: 0 } },
+                { id: 'p2', x: 46.5, z: -101, type: 'line' as const, corner: { type: 'kaku-r' as const, size: 0.5 } },
+                { id: 'p3', x: 42, z: -103.25, type: 'line' as const, corner: { type: 'sumi-r' as const, size: 2 } },
+                { id: 'p4', x: 42, z: -118.85, type: 'line' as const, corner: { type: 'sumi-r' as const, size: 2 } },
+                { id: 'p5', x: 45, z: -136, type: 'line' as const, corner: { type: 'kaku-r' as const, size: 2 } },
+                { id: 'p6', x: 45, z: -150, type: 'line' as const, corner: { type: 'none' as const, size: 0 } }
             ]
         }
 

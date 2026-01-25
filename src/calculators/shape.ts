@@ -216,6 +216,7 @@ export function calculateShape(
             const currentPointObj: Point = {
                 x: currentX,
                 z: currentZ,
+                type: 'line',
                 corner: { type: 'none', size: 0 },
                 id: 'curr'
             }
@@ -318,6 +319,58 @@ export function calculateShape(
                 }
                 i += 1
             } else {
+                if (nextPoint.type === 'arc' && nextPoint.arcRadius && nextPoint.arcRadius > 0) {
+                    // 独立した円弧要素
+                    const r = nextPoint.arcRadius
+                    const isConvex = nextPoint.isConvex !== false
+
+                    // 簡易的な中心計算（弦の中点から垂線を下ろす）
+                    // 本来は2解あるが、isConvexで判定する
+                    const dx = (nextPoint.x - currentX) / 2
+                    const dz = nextPoint.z - currentZ
+                    const dist = Math.sqrt(dx * dx + dz * dz)
+
+                    if (dist > 0 && dist <= r * 2) {
+                        const h = Math.sqrt(Math.max(0, r * r - (dist / 2) * (dist / 2)))
+                        // 中点
+                        const midX = (currentX + nextPoint.x) / 2
+                        const midZ = (currentZ + nextPoint.z) / 2
+
+                        // 法線方向
+                        let nx = -dz / dist
+                        let nz = dx / dist
+
+                        // 凸凹と切削方向（sideSign）によって中心を選択
+                        // 外径加工(sideSign=1)で凸なら中心は内側
+                        const sideSign = machineSettings.toolPost === 'rear' ? -1 : 1
+                        const direction = (isConvex ? -1 : 1) * sideSign
+
+                        const centerX = midX + nx * h * direction * 2 // 直径値なので2倍
+                        const centerZ = midZ + nz * h * direction
+
+                        results.push({
+                            index: results.length + 1,
+                            type: 'corner-r', // 内部的には角Rと同じ円弧として扱う
+                            startX: currentX,
+                            startZ: currentZ,
+                            endX: nextPoint.x,
+                            endZ: nextPoint.z,
+                            centerX,
+                            centerZ,
+                            i: round3(centerX - currentX / 2), // 中心X(半径) - 開始X(半径)
+                            k: round3(centerZ - currentZ),
+                            radius: r,
+                            isConvex,
+                            gCode: isConvex ? 'G02' : 'G03', // 暫定。本来は向きに依存
+                            sweep: isConvex ? 0 : 1
+                        })
+                        currentX = nextPoint.x
+                        currentZ = nextPoint.z
+                        i += 1
+                        continue
+                    }
+                }
+
                 results.push({
                     index: results.length + 1,
                     type: 'line',

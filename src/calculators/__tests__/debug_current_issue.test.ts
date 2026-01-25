@@ -17,10 +17,10 @@ describe('ユーザー報告問題の再現', () => {
     it('補正座標テーブルを出力', () => {
         const shape = {
             points: [
-                { id: '1', x: 46.5, z: 0, corner: { type: 'none' as const, size: 0 } },
-                { id: '2', x: 46.5, z: -101, corner: { type: 'kaku-r' as const, size: 0.5 } },
-                { id: '3', x: 42, z: -103.25, corner: { type: 'sumi-r' as const, size: 2 } },
-                { id: '4', x: 42, z: -118.85, corner: { type: 'none' as const, size: 0 } },
+                { id: '1', x: 46.5, z: 0, type: 'line' as const, corner: { type: 'none' as const, size: 0 } },
+                { id: '2', x: 46.5, z: -101, type: 'line' as const, corner: { type: 'kaku-r' as const, size: 0.5 } },
+                { id: '3', x: 42, z: -103.25, type: 'line' as const, corner: { type: 'sumi-r' as const, size: 2 } },
+                { id: '4', x: 42, z: -118.85, type: 'line' as const, corner: { type: 'none' as const, size: 0 } },
             ]
         }
 
@@ -84,9 +84,9 @@ describe('ユーザー報告問題の再現', () => {
         // 実際の形状を使って、noseRが渡されているか確認
         const shape = {
             points: [
-                { id: '1', x: 46.5, z: 0, corner: { type: 'none' as const, size: 0 } },
-                { id: '2', x: 46.5, z: -101, corner: { type: 'kaku-r' as const, size: 0.5 } },
-                { id: '3', x: 42, z: -103.25, corner: { type: 'none' as const, size: 0 } },
+                { id: '1', x: 46.5, z: 0, type: 'line' as const, corner: { type: 'none' as const, size: 0 } },
+                { id: '2', x: 46.5, z: -101, type: 'line' as const, corner: { type: 'kaku-r' as const, size: 0.5 } },
+                { id: '3', x: 42, z: -103.25, type: 'line' as const, corner: { type: 'none' as const, size: 0 } },
             ]
         }
 
