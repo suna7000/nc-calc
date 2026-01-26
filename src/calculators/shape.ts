@@ -762,7 +762,6 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
     let finalSize = adjustedSize
     let tDist_in = 0
     let tDist_out = 0
-    let manualExitZ: number | null = null
     let manualEntryZ: number | null = null
 
     if (half > 0.0001) {
