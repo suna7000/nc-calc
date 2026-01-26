@@ -896,11 +896,10 @@ function calculateAdjacentCorners(p1: Point, p2: Point, p3: Point, p4: Point): a
         const x3 = p3.x / 2 + n3.x * s3 * R2
 
         const h = Math.abs(x3 - x1)
-        // Mazatrol的なS字自動計算は、頂点間が非常に近く、かつ半径の合計に余裕がない場合のみ
-        // ただし現場の R6 + R0.5 のようなケース（l2=5.0, sumR=6.5）は、
-        // 独立したR展開を期待されることが多いため、より閾値を厳しくする (l2 < targetDist * 0.3)
-        if (h < targetDist * 0.95 && l2 < targetDist * 0.3) {
-            const dz_total = Math.sqrt(targetDist * targetDist - h * h)
+        // Mazatrol的なS字自動計算は、頂点間が「ほぼ同一」とみなせる極小距離の場合のみ発動させる
+        // ユーザー報告の R6 + R0.5 (l2=5.0) のようなケースは、絶対に個別計算（独立R）に任せる
+        if (h < targetDist * 0.95 && l2 < 0.1) {
+            const dz_total = Math.sqrt(Math.max(0, targetDist * targetDist - h * h))
 
             // Zの配分 (半径比)
             const dz1 = dz_total * (R1 / targetDist)
