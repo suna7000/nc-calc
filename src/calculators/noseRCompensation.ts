@@ -40,12 +40,12 @@ function round3(v: number): number {
 export function pToO(px: number, pz: number, noseR: number, toolType: number): { ox: number; oz: number } {
     let dx = 0, dz = 0
     switch (toolType) {
-        case 3: dx = noseR; dz = -noseR; break;   // 外径 / 前
-        case 4: dx = noseR; dz = noseR; break;    // 外径 / 奥
-        case 2: dx = -noseR; dz = -noseR; break;  // 内径 / 前
-        case 1: dx = -noseR; dz = noseR; break;   // 内径 / 奥
+        case 3: dx = noseR; dz = noseR; break;    // 外径 / 前向き (G42でZマイナスへシフト)
+        case 4: dx = noseR; dz = -noseR; break;   // 外径 / 奥向き
+        case 2: dx = -noseR; dz = noseR; break;   // 内径 / 前向き
+        case 1: dx = -noseR; dz = -noseR; break;  // 内径 / 奥向き
         case 8: dx = noseR; dz = 0; break;
-        default: dx = noseR; dz = -noseR;
+        default: dx = noseR; dz = noseR;
     }
     const ox = px - (dx * 2)
     const oz = pz - dz
@@ -149,7 +149,9 @@ export class CenterTrackCalculator {
         const len = Math.sqrt(nx * nx + nz * nz)
         if (len < 1e-9) return { nx: 0, nz: 0 }
         const rNx = nx / len
-        const sign = (rNx * this.sideSign >= 0) ? 1 : -1
+        // 法線の極性判定：後刃物台・外径加工の物理系に固定。
+        // 空側(チップがある側)へのオフセット方向をsideSignで制御。
+        const sign = this.sideSign
         return { nx: rNx * sign, nz: (nz / len) * sign }
     }
 }

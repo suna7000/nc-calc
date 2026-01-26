@@ -759,31 +759,62 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
     const half = angleBetween / 2
 
     // Rの自動調整 (Limit check)
-    // 角度が非常に小さい（直線に近い）場合、tan(half) が小さくなり、maxR が巨大になる。 
-    // また half=0 の場合 tan(half)=0 になるためゼロ除算に注意。
     let finalSize = adjustedSize
+    let tDist_in = 0
+    let tDist_out = 0
+    let manualExitZ: number | null = null
+    let manualEntryZ: number | null = null
+
     if (half > 0.0001) {
-        const maxTDist = Math.min(l1, l2) * 0.99
-        const maxR = maxTDist * Math.tan(half)
-        finalSize = Math.min(adjustedSize, maxR)
+        const tDist_req = finalSize / Math.tan(half)
+
+        // 現場流：隅Rにおいて、接続先(l2)が足りない場合はRを縮小せず「クリップ展開」
+        if (tDist_req > l2 * 0.999 && p2.corner.type === 'sumi-r') {
+            const is90Step = Math.abs(u1x * u2x + u1z * u2z) < 0.01
+            if (is90Step) {
+                // シャフト(l1)側は接線を維持、面(l2)側は頂点まで展開
+                tDist_in = finalSize
+                tDist_out = l2
+                // 接地側は頂点から dz = sqrt(R^2 - (R-h)^2) 戻った地点
+                const dz_back = Math.sqrt(Math.max(0, finalSize * finalSize - (finalSize - l2) * (finalSize - l2)))
+                // entryZ をカド(p2.z)から dz_back 分だけ「戻す」 (u1方向へ finalSize ではなく dz_back)
+                tDist_in = dz_back
+                manualEntryZ = p2.z + u1z * dz_back
+                // exit はカド p2.z そのまま (tDist_out = l2 により X方向は p3.x に到達)
+            } else {
+                tDist_in = tDist_out = tDist_req
+            }
+        } else {
+            tDist_in = tDist_out = tDist_req
+        }
+
+        // 通常のリミットチェック（隅R以外、または開始側(l1)も足りない場合）
+        if (tDist_in > l1 * 0.99 || (tDist_out > l2 * 0.99 && p2.corner.type !== 'sumi-r')) {
+            const maxR = Math.min(l1, l2) * 0.99 * Math.tan(half)
+            finalSize = Math.min(finalSize, maxR)
+            tDist_in = tDist_out = finalSize / Math.tan(half)
+            manualEntryZ = null
+        }
     } else {
-        // 直線に近い場合はRを入れる余地がない
         finalSize = 0
     }
 
     const bX = u1x + u2x, bZ = u1z + u2z, bL = Math.sqrt(bX * bX + bZ * bZ)
-    if (bL < 1e-6) return null // 180度または0度の場合は計算不能
+    if (bL < 1e-6) return null
 
-    const cDist = finalSize / Math.sin(half), tDist = finalSize / Math.tan(half)
+    const cDist = finalSize / Math.sin(half)
     const cX = p2.x / 2 + (bX / bL) * cDist, cZ = p2.z + (bZ / bL) * cDist
-    const eX = p2.x / 2 + u1x * tDist, eZ = p2.z + u1z * tDist
-    const xX = p2.x / 2 + u2x * tDist, xZ = p2.z + u2z * tDist
+    const eX = p2.x / 2 + u1x * tDist_in
+    const eZ = manualEntryZ !== null ? manualEntryZ : p2.z + u1z * tDist_in
+
+    const xX = p2.x / 2 + u2x * tDist_out
+    const xZ = p2.z + u2z * tDist_out
 
     return {
         entryX: round3(eX * 2), entryZ: round3(eZ), exitX: round3(xX * 2), exitZ: round3(xZ),
         i: round3(cX - eX), k: round3(cZ - eZ), centerX: round3(cX * 2), centerZ: round3(cZ),
         isLeftTurn: (u1x * u2z - u1z * u2x) > 0,
-        distToVertex: round3(tDist),
+        distToVertex: round3(tDist_in),
         adjustedRadius: round3(finalSize),
         originalRadius: originalSize
     }
@@ -865,9 +896,10 @@ function calculateAdjacentCorners(p1: Point, p2: Point, p3: Point, p4: Point): a
         const x3 = p3.x / 2 + n3.x * s3 * R2
 
         const h = Math.abs(x3 - x1)
-        // Mazatrol的なS字自動計算は、頂点間が非常に近く、かつ段差(h)が半径合計より小さい場合のみ（余裕がない場合）
-        // 頂点間距離 (l2) が R1+R2 より長い、または h が R1+R2 に近い場合はマージしない
-        if (h < targetDist * 0.95 && l2 < targetDist * 1.1) {
+        // Mazatrol的なS字自動計算は、頂点間が非常に近く、かつ半径の合計に余裕がない場合のみ
+        // ただし現場の R6 + R0.5 のようなケース（l2=5.0, sumR=6.5）は、
+        // 独立したR展開を期待されることが多いため、より閾値を厳しくする (l2 < targetDist * 0.3)
+        if (h < targetDist * 0.95 && l2 < targetDist * 0.3) {
             const dz_total = Math.sqrt(targetDist * targetDist - h * h)
 
             // Zの配分 (半径比)
