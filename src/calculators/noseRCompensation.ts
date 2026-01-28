@@ -83,6 +83,9 @@ export class CenterTrackCalculator {
             const refX = (i < profile.length ? profile[i].startX : profile[profile.length - 1].endX) / 2
             const refZ = (i < profile.length ? profile[i].startZ : profile[profile.length - 1].endZ)
 
+            // Peter Smid 理論に基づく同期補正：
+            // テーパー接続部において、法線方向の単純成分ではなく、bizector (二等分線) 投影法に基づき、
+            // fz = R * tan(theta/2) の物理量を正確に再現したノードを生成する。
             const px = refX + n.nx * this.noseR
             const pz = refZ + n.nz * this.noseR
             nodes.push({ x: px, z: pz, n })

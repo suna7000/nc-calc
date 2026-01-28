@@ -767,19 +767,27 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
     if (half > 0.0001) {
         const tDist_req = finalSize / Math.tan(half)
 
-        // 現場流：隅Rにおいて、接続先(l2)が足りない場合はRを縮小せず「クリップ展開」
-        if (tDist_req > l2 * 0.999 && p2.corner.type === 'sumi-r') {
-            const is90Step = Math.abs(u1x * u2x + u1z * u2z) < 0.01
-            if (is90Step) {
-                // シャフト(l1)側は接線を維持、面(l2)側は頂点まで展開
-                tDist_in = finalSize
+        let isExpanded = false
+        const isSumiR = p2.corner.type === 'sumi-r'
+        const is90Step = Math.abs(u1x * u2x + u1z * u2z) < 0.01
+
+        if (isSumiR && is90Step) {
+            // 隣接ポイントにコーナーがある時は、展開すると干渉するため従来通り縮小する
+            // type === 'none' または size === 0 の場合は実質的にコーナーなしとみなす
+            const nextHasCorner = p3.corner && p3.corner.type !== 'none' && p3.corner.size > 0
+            const prevHasCorner = p1.corner && p1.corner.type !== 'none' && p1.corner.size > 0
+
+            if (tDist_req > l2 * 0.999 && !nextHasCorner) {
                 tDist_out = l2
-                // 接地側は頂点から dz = sqrt(R^2 - (R-h)^2) 戻った地点
                 const dz_back = Math.sqrt(Math.max(0, finalSize * finalSize - (finalSize - l2) * (finalSize - l2)))
-                // entryZ をカド(p2.z)から dz_back 分だけ「戻す」 (u1方向へ finalSize ではなく dz_back)
                 tDist_in = dz_back
                 manualEntryZ = p2.z + u1z * dz_back
-                // exit はカド p2.z そのまま (tDist_out = l2 により X方向は p3.x に到達)
+                isExpanded = true
+            } else if (tDist_req > l1 * 0.999 && !prevHasCorner) {
+                tDist_out = finalSize
+                tDist_in = l1
+                manualEntryZ = p1.z
+                isExpanded = true
             } else {
                 tDist_in = tDist_out = tDist_req
             }
@@ -787,12 +795,10 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
             tDist_in = tDist_out = tDist_req
         }
 
-        // 通常のリミットチェック（隅R以外、または開始側(l1)も足りない場合）
-        if (tDist_in > l1 * 0.99 || (tDist_out > l2 * 0.99 && p2.corner.type !== 'sumi-r')) {
-            const maxR = Math.min(l1, l2) * 0.99 * Math.tan(half)
-            finalSize = Math.min(finalSize, maxR)
+        // ユーザー指定のRを尊重（自動縮小は行わない）
+        // 以前はここでRを縮小していたが、ユーザーが指定した値をそのまま使う
+        if (!isExpanded) {
             tDist_in = tDist_out = finalSize / Math.tan(half)
-            manualEntryZ = null
         }
     } else {
         finalSize = 0
@@ -801,13 +807,26 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
     const bX = u1x + u2x, bZ = u1z + u2z, bL = Math.sqrt(bX * bX + bZ * bZ)
     if (bL < 1e-6) return null
 
-    const cDist = finalSize / Math.sin(half)
-    const cX = p2.x / 2 + (bX / bL) * cDist, cZ = p2.z + (bZ / bL) * cDist
+    // 二等分線に基づく標準の中心（非限定時）
+    const cDist_std = finalSize / Math.sin(half)
+    let cX = p2.x / 2 + (bX / bL) * cDist_std
+    let cZ = p2.z + (bZ / bL) * cDist_std
+
     const eX = p2.x / 2 + u1x * tDist_in
     const eZ = manualEntryZ !== null ? manualEntryZ : p2.z + u1z * tDist_in
-
     const xX = p2.x / 2 + u2x * tDist_out
     const xZ = p2.z + u2z * tDist_out
+
+    // 幾何学的展開（非対称設定）の場合、中心を再定義
+    // ここでは単純に「第2セグメント(x側)に垂直」かつ「半径 finalSize」となる位置を中心に据える
+    // 90度カドの場合、これで幾何学的に正しくなる
+    if (tDist_in !== tDist_out && Math.abs(u1x * u2x + u1z * u2z) < 0.01) {
+        // u2 に垂直な方向（内側）
+        const nx = -u2z, nz = u2x
+        const sign = (u1x * u2z - u1z * u2x) > 0 ? 1 : -1
+        cX = xX + nx * finalSize * sign
+        cZ = xZ + nz * finalSize * sign
+    }
 
     return {
         entryX: round3(eX * 2), entryZ: round3(eZ), exitX: round3(xX * 2), exitZ: round3(xZ),
