@@ -760,34 +760,32 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
 
     // Rの自動調整 (Limit check)
     let finalSize = adjustedSize
+    let isExpanded = false
     let tDist_in = 0
+
     let tDist_out = 0
     let manualEntryZ: number | null = null
 
     if (half > 0.0001) {
         const tDist_req = finalSize / Math.tan(half)
 
-        let isExpanded = false
         const isSumiR = p2.corner.type === 'sumi-r'
         const is90Step = Math.abs(u1x * u2x + u1z * u2z) < 0.01
-
         if (isSumiR && is90Step) {
             // 隣接ポイントにコーナーがある時は、展開すると干渉するため従来通り縮小する
-            // type === 'none' または size === 0 の場合は実質的にコーナーなしとみなす
             const nextHasCorner = p3.corner && p3.corner.type !== 'none' && p3.corner.size > 0
             const prevHasCorner = p1.corner && p1.corner.type !== 'none' && p1.corner.size > 0
 
-            if (tDist_req > l2 * 0.999 && !nextHasCorner) {
-                tDist_out = l2
-                const dz_back = Math.sqrt(Math.max(0, finalSize * finalSize - (finalSize - l2) * (finalSize - l2)))
-                tDist_in = dz_back
-                manualEntryZ = p2.z + u1z * dz_back
+            // Case: Gap (L1 or L2) is shorter than R.
+            // Factory Manager Style: If input is Virtual Corner, allow R to extend beyond gap.
+            // We will clip it later at the intersection.
+            // Only necessity: Do not engage auto-shrink (Limit Check).
+            if ((finalSize > l2 * 0.999 && !nextHasCorner) || (finalSize > l1 * 0.999 && !prevHasCorner)) {
+                // Expanded Mode: Do not shrink tDist_req.
+                tDist_in = tDist_req
+                tDist_out = tDist_req
                 isExpanded = true
-            } else if (tDist_req > l1 * 0.999 && !prevHasCorner) {
-                tDist_out = finalSize
-                tDist_in = l1
-                manualEntryZ = p1.z
-                isExpanded = true
+                manualEntryZ = null
             } else {
                 tDist_in = tDist_out = tDist_req
             }
@@ -795,10 +793,14 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
             tDist_in = tDist_out = tDist_req
         }
 
-        // ユーザー指定のRを尊重（自動縮小は行わない）
-        // 以前はここでRを縮小していたが、ユーザーが指定した値をそのまま使う
+        // Auto-Shrink Logic (Skipped if isExpanded)
         if (!isExpanded) {
-            tDist_in = tDist_out = finalSize / Math.tan(half)
+            if (tDist_in > l1 * 0.99 || tDist_out > l2 * 0.99) {
+                const maxR = Math.min(l1, l2) * 0.99 * Math.tan(half)
+                finalSize = Math.min(finalSize, maxR)
+                tDist_in = tDist_out = finalSize / Math.tan(half)
+                manualEntryZ = null
+            }
         }
     } else {
         finalSize = 0
@@ -807,26 +809,46 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
     const bX = u1x + u2x, bZ = u1z + u2z, bL = Math.sqrt(bX * bX + bZ * bZ)
     if (bL < 1e-6) return null
 
-    // 二等分線に基づく標準の中心（非限定時）
+    // Standard Center Calculation
     const cDist_std = finalSize / Math.sin(half)
     let cX = p2.x / 2 + (bX / bL) * cDist_std
     let cZ = p2.z + (bZ / bL) * cDist_std
 
-    const eX = p2.x / 2 + u1x * tDist_in
-    const eZ = manualEntryZ !== null ? manualEntryZ : p2.z + u1z * tDist_in
-    const xX = p2.x / 2 + u2x * tDist_out
-    const xZ = p2.z + u2z * tDist_out
+    // Standard Entry/Exit Calculation
+    // Use `let` to allow clipping modification
+    let eX = p2.x / 2 + u1x * tDist_in
+    let eZ = manualEntryZ !== null ? manualEntryZ : p2.z + u1z * tDist_in
+    let xX = p2.x / 2 + u2x * tDist_out
+    let xZ = p2.z + u2z * tDist_out
 
-    // 幾何学的展開（非対称設定）の場合、中心を再定義
-    // ここでは単純に「第2セグメント(x側)に垂直」かつ「半径 finalSize」となる位置を中心に据える
-    // 90度カドの場合、これで幾何学的に正しくなる
-    if (tDist_in !== tDist_out && Math.abs(u1x * u2x + u1z * u2z) < 0.01) {
-        // u2 に垂直な方向（内側）
-        const nx = -u2z, nz = u2x
-        const sign = (u1x * u2z - u1z * u2x) > 0 ? 1 : -1
-        cX = xX + nx * finalSize * sign
-        cZ = xZ + nz * finalSize * sign
+    // -------------------------------------------------------------------------
+    // Intersection Clipping ("Factory Manager's Logic")
+    // If isExpanded is true, we extended beyond the gap. 
+    // Clip the Exit point at the intersection with the next wall leg.
+    // -------------------------------------------------------------------------
+    if (isExpanded) {
+        // Check Exit Side (L2 / Next Wall)
+        if (l2 < finalSize && l2 > 0 && finalSize > l2 * 1.001) {
+            const gap = l2
+            const offset = finalSize - gap
+            const shift = Math.sqrt(Math.max(0, finalSize * finalSize - offset * offset))
+
+            // Move Exit to the Wall Plane (Distance gap along u2)
+            const backTrack = finalSize - gap
+            xX -= u2x * backTrack
+            xZ -= u2z * backTrack
+
+            // Shift Orthogonally along u1 (towards P1) to find intersection
+            // u1 vector points from P2 to P1. 
+            // Distance from Tangent P2 to Intersection is (R - shift).
+            const shiftFromCorner = finalSize - shift
+            xX += u1x * shiftFromCorner
+            xZ += u1z * shiftFromCorner
+        }
     }
+
+    // Center re-calc is not needed for 90deg corners since geometric center remains same relative to P2.
+    // (We simply clipped the arc drawing).
 
     return {
         entryX: round3(eX * 2), entryZ: round3(eZ), exitX: round3(xX * 2), exitZ: round3(xZ),
