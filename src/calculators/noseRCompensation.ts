@@ -35,12 +35,12 @@ function round3(v: number): number {
 
 /**
  * プログラム点 O = P - V_offset
- * 物理監査結果: Tip 3 (外径/前) は dz = -noseR
+ * 物理監査結果: Tip 3 (外径/前) は V_offset.z = noseR, oz = pz - noseR (Zマイナス方向へシフト)
  */
 export function pToO(px: number, pz: number, noseR: number, toolType: number): { ox: number; oz: number } {
     let dx = 0, dz = 0
     switch (toolType) {
-        case 3: dx = noseR; dz = noseR; break;    // 外径 / 前向き (G42でZマイナスへシフト)
+        case 3: dx = noseR; dz = noseR; break;    // 外径 / 前向き
         case 4: dx = noseR; dz = -noseR; break;   // 外径 / 奥向き
         case 2: dx = -noseR; dz = noseR; break;   // 内径 / 前向き
         case 1: dx = -noseR; dz = -noseR; break;  // 内径 / 奥向き
@@ -56,11 +56,13 @@ export class CenterTrackCalculator {
     private noseR: number;
     private toolType: number;
     private sideSign: number; // 外径: 1, 内径: -1
+    private isExternal: boolean; // 外径加工かどうか
 
     constructor(noseR: number, isExternal: boolean = true, toolType: number = 3) {
         this.noseR = noseR;
         this.toolType = toolType;
         this.sideSign = isExternal ? 1 : -1;
+        this.isExternal = isExternal;
     }
 
     calculate(profile: Segment[]): CompensatedSegment[] {
@@ -76,16 +78,20 @@ export class CenterTrackCalculator {
             } else {
                 const n1 = this.getNormalAt(profile[i - 1], 'end')
                 const n2 = this.getNormalAt(profile[i], 'start')
-                const bisec = this.calculateBisector(n1, n2)
-                n = { nx: bisec.bx * (bisec.dist / this.noseR), nz: bisec.bz * (bisec.dist / this.noseR) }
+
+                // 直線-直線接続の場合、教科書式を使用
+                if (profile[i - 1].type === 'line' && profile[i].type === 'line') {
+                    n = this.calculateTextbookOffset(profile[i - 1], profile[i], n1, n2)
+                } else {
+                    const bisec = this.calculateBisector(n1, n2)
+                    n = { nx: bisec.bx * (bisec.dist / this.noseR), nz: bisec.bz * (bisec.dist / this.noseR) }
+                }
             }
 
             const refX = (i < profile.length ? profile[i].startX : profile[profile.length - 1].endX) / 2
             const refZ = (i < profile.length ? profile[i].startZ : profile[profile.length - 1].endZ)
 
-            // Peter Smid 理論に基づく同期補正：
-            // テーパー接続部において、法線方向の単純成分ではなく、bizector (二等分線) 投影法に基づき、
-            // fz = R * tan(theta/2) の物理量を正確に再現したノードを生成する。
+            // 補正オフセットを適用
             const px = refX + n.nx * this.noseR
             const pz = refZ + n.nz * this.noseR
             nodes.push({ x: px, z: pz, n })
@@ -125,12 +131,102 @@ export class CenterTrackCalculator {
         return result
     }
 
+    /**
+     * 教科書式補正（直線-直線接続専用）
+     * 出典: nose_r_calculation_reference.md
+     *
+     * 教科書式:
+     *   O' = O - (fx, fz)（プログラム座標 = 形状座標 - オフセット）
+     *
+     * 現在の実装との統合:
+     *   O' = P - V_offset（プログラム座標 = 工具中心 - V_offset）
+     *   P = O + (nx * R, nz * R)（工具中心 = 形状座標 + オフセット）
+     *
+     * 逆算:
+     *   O' = O - (fx, fz) = P - V_offset
+     *   P = O - (fx, fz) + V_offset = O + (V_offset - (fx, fz))
+     *   よって、P = O + ((2R - fx), (R - fz))（Tip 3の場合、V_offset = (2R, R)）
+     *   nx * R = 2R - fx  →  nx = 2 - fx/R
+     *   nz * R = R - fz   →  nz = 1 - fz/R
+     */
+    private calculateTextbookOffset(
+        seg1: Segment,
+        seg2: Segment,
+        n1: { nx: number, nz: number },
+        n2: { nx: number, nz: number }
+    ): { nx: number, nz: number } {
+        // セグメント2の方向ベクトルから角度を計算
+        const dx = (seg2.endX - seg2.startX) / 2  // 半径値
+        const dz = seg2.endZ - seg2.startZ
+        const len = Math.sqrt(dx * dx + dz * dz)
+
+        if (len < 1e-9) {
+            // 垂直線の場合は法線オフセット
+            return { nx: n2.nx, nz: n2.nz }
+        }
+
+        // テーパー角度 θ（水平からの角度、ラジアン）
+        const theta = Math.atan2(Math.abs(dx), Math.abs(dz))
+        const halfTheta = theta / 2
+        const tanHalf = Math.tan(halfTheta)
+
+        // 教科書式の補正量を計算
+        // fz = R × (1 - tan(θ/2))（正刃の場合）
+        const fz = this.isExternal
+            ? this.noseR * (1 - tanHalf)  // 正刃（外径）
+            : this.noseR * (1 + tanHalf)  // 逆刃（内径）
+
+        // φ = 90° - θ
+        const phi = Math.PI / 2 - theta
+        const halfPhi = phi / 2
+        const tanHalfPhi = Math.tan(halfPhi)
+
+        // fx = 2R × (1 - tan(φ/2))（直径値）
+        const fx = 2 * this.noseR * (1 - tanHalfPhi)
+
+        // 上りテーパー/下りテーパーの判定
+        // 下りテーパー: X減少（dx < 0）
+        const isTaperingDown = dx < 0
+
+        // 教科書式の適用方法:
+        //   上りテーパー: O' = O - (fx, fz)
+        //   下りテーパー: O' = O + (fx, -fz)
+        //
+        // 工具中心オフセットに変換（Tip 3の場合、V_offset = (2R, R)）:
+        //   P = O' + V_offset
+        //
+        // 下りテーパーの場合:
+        //   P = O + (fx, -fz) + (2R, R) = O + ((2R + fx), (R - fz))
+        //   nx * R = 2R + fx  →  nx = 2 + fx/R
+        //   nz * R = R - fz   →  nz = 1 - fz/R
+        //
+        // 上りテーパーの場合:
+        //   P = O - (fx, fz) + (2R, R) = O + ((2R - fx), (R - fz))
+        //   nx * R = 2R - fx  →  nx = 2 - fx/R
+        //   nz * R = R - fz   →  nz = 1 - fz/R
+
+        const nx_offset = isTaperingDown
+            ? 2 + fx / this.noseR  // 下りテーパー
+            : 2 - fx / this.noseR  // 上りテーパー
+
+        const nz_offset = 1 - fz / this.noseR  // 共通
+
+        return { nx: nx_offset, nz: nz_offset }
+    }
+
     private calculateBisector(n1: { nx: number, nz: number }, n2: { nx: number, nz: number }): { dist: number, bx: number, bz: number } {
         const dot = Math.max(-1.0, Math.min(1.0, n1.nx * n2.nx + n1.nz * n2.nz))
         const cosHalf = Math.sqrt((1.0 + dot) / 2.0)
+        const sinHalf = Math.sqrt((1.0 - dot) / 2.0)
 
-        // Spike Guard: 180度反転等での発散防止。通常は noseR / cosHalf
-        const dist = this.noseR / Math.max(0.01, cosHalf)
+        // 教科書式（nose_r_calculation_reference.md）:
+        // 正刃（外径加工）: dist = R × (1 - tan(θ/2))
+        // 逆刃（内径加工）: dist = R × (1 + tan(θ/2))
+        // Spike Guard: 180度反転等での発散防止
+        const tanHalf = sinHalf / Math.max(0.01, cosHalf)
+        const dist = this.isExternal
+            ? this.noseR * (1 - tanHalf)  // 正刃（外径）
+            : this.noseR * (1 + tanHalf)  // 逆刃（内径）
 
         let bx = n1.nx + n2.nx, bz = n1.nz + n2.nz
         const len = Math.sqrt(bx * bx + bz * bz)
