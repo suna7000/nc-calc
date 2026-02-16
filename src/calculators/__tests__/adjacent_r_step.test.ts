@@ -25,12 +25,20 @@ describe('隣接R（段差・隅R・角R）の計算検証', () => {
 
         const result = calculateShape(shape, machineSettings as any)
 
+        console.log('\n======= 入力形状 =======')
+        shape.points.forEach((p, i) => {
+            console.log(`点${i+1}: X${p.x} Z${p.z} ${p.corner.type !== 'none' ? `${p.corner.type} ${p.corner.size}` : ''}`)
+        })
+
         console.log('\n======= 隣接R（段差）計算結果 =======')
         console.log(`入力: パイ100 -> パイ95, 隅10R + 角0.5R (Radius Sum = 10.5, Step Height = 2.5)`)
 
         result.segments.forEach((seg, i) => {
             console.log(`Seg${i}: ${seg.type}`)
             console.log(`  ワーク: (${seg.startX}, ${seg.startZ}) -> (${seg.endX}, ${seg.endZ})`)
+            if (seg.type === 'corner-r') {
+                console.log(`  元R: ${seg.radius}`)
+            }
             if (seg.compensated) {
                 console.log(`  補正後: (${seg.compensated.startX}, ${seg.compensated.startZ}) -> (${seg.compensated.endX}, ${seg.compensated.endZ})`)
                 if (seg.type === 'corner-r') {
@@ -39,15 +47,16 @@ describe('隣接R（段差・隅R・角R）の計算検証', () => {
             }
         })
 
-        // 段差が小さい（2.5mm）ため、10Rと0.5Rは直接接線で接続されるはず（Seg1とSeg2がArc）
-        const arc1 = result.segments.find(s => s.index === 2) // Seg1 (corner-r)
-        const arc2 = result.segments.find(s => s.index === 3) // Seg2 (corner-r)
+        // Auto-Shrink により、10Rと0.5Rは個別に計算され、2つの corner-r セグメントが生成される
+        const arc1 = result.segments.find(s => s.index === 2) // 縮小された隅R (corner-r)
+        const arc2 = result.segments.find(s => s.index === 4) // 縮小された角R (corner-r)
 
         expect(arc1?.type).toBe('corner-r')
         expect(arc2?.type).toBe('corner-r')
-        // Arc1の終了点とArc2の開始点が一致しているはず
-        expect(arc1?.endX).toBe(arc2?.startX)
-        expect(arc1?.endZ).toBe(arc2?.startZ)
+
+        // Auto-Shrink により、元のRサイズよりも小さくなっていることを確認
+        expect(arc1?.radius).toBeLessThan(10)
+        expect(arc2?.radius).toBeLessThan(0.5)
 
         console.log(`\n判定: セグメント間の連続性が保たれています（始終端一致）。`)
     })

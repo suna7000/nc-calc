@@ -53,50 +53,45 @@ describe('実際の図面データでの検証', () => {
         expect(angle).toBeCloseTo(30, 0)
     })
 
-    it('実際の図面データでのノーズR補正計算', () => {
+    it('30°テーパー（X60 Z-45.653開始）でのノーズR補正計算', () => {
+        // 正しい30°テーパー: X60 Z-45.653 → X59.6 Z-46
+        // 手書きメモのX62 Z-44.508は補正後の座標なので、このテストでは使用しない
         const shape = {
             points: [
-                createPoint(60, 0, noCorner()),
-                createPoint(60, -45.653, noCorner()),
-                createPoint(59.6, -46, noCorner()),
-                createPoint(59.6, -50, { type: 'sumi-r', size: 2 }),
-                createPoint(80, -50, noCorner()),
-                createPoint(80, -60, noCorner())
+                createPoint(60, -45.653, noCorner()),  // 30°テーパー開始点
+                createPoint(59.6, -46, noCorner()),     // テーパー終点
+                createPoint(59.6, -50, noCorner())      // 次の点
             ]
         }
 
         const result = calculateShape(shape, settings)
 
-        console.log('\n=== 実際の図面データでの計算結果 ===')
+        console.log('\n=== 30°テーパーでの計算結果 ===')
 
-        // 点2の補正後座標
         const seg1 = result.segments[0]
-        const seg2 = result.segments[1]
 
-        console.log('\nセグメント1（点1→点2）:')
-        console.log(`  補正前: X${seg1.endX} Z${seg1.endZ}`)
-        console.log(`  補正後: X${seg1.compensated?.endX} Z${seg1.compensated?.endZ}`)
+        console.log('\nセグメント1（X60 Z-45.653 → X59.6 Z-46）:')
+        console.log(`  補正前: X${seg1.startX} Z${seg1.startZ} → X${seg1.endX} Z${seg1.endZ}`)
+        console.log(`  補正後: X${seg1.compensated?.startX} Z${seg1.compensated?.startZ} → X${seg1.compensated?.endX} Z${seg1.compensated?.endZ}`)
 
-        console.log('\nセグメント2（点2→点3）:')
-        console.log(`  補正前: X${seg2.startX} Z${seg2.startZ} → X${seg2.endX} Z${seg2.endZ}`)
-        console.log(`  補正後: X${seg2.compensated?.startX} Z${seg2.compensated?.startZ} → X${seg2.compensated?.endX} Z${seg2.compensated?.endZ}`)
-
-        const compZ = seg2.compensated?.endZ ?? seg2.endZ
+        const compZ = seg1.compensated?.endZ ?? seg1.endZ
 
         console.log('\n=== 結果 ===')
         console.log(`アプリ出力（補正後）: Z${compZ.toFixed(3)}`)
         console.log(`手書き期待値: Z-46.586`)
         console.log(`誤差: ${(compZ - (-46.586)).toFixed(3)}mm`)
 
-        // 理論的な補正量を計算
+        // 教科書式の理論値
         const noseR = 0.8
-        const angle = 30  // テーパー角度
-        const fz = noseR * Math.tan((angle / 2) * Math.PI / 180)
+        const theta = 30  // テーパー角度
+        const fz = noseR * (1 - Math.tan((theta / 2) * Math.PI / 180))
 
-        console.log('\n=== 理論値 ===')
-        console.log(`fz = R × tan(θ/2) = ${fz.toFixed(3)}mm`)
-        console.log(`簡易計算での補正後Z: ${(-46 - fz).toFixed(3)}`)
-        console.log(`（元座標 Z-46 から fz を減算）`)
+        console.log('\n=== 理論値（教科書式）===')
+        console.log(`fz = R × (1 - tan(θ/2)) = ${fz.toFixed(3)}mm`)
+        console.log(`期待補正後Z = ${(-46 - fz).toFixed(3)}`)
+
+        // 期待値との一致を検証
+        expect(compZ).toBeCloseTo(-46.586, 3)
     })
 
     it('手書き計算方法の逆算', () => {

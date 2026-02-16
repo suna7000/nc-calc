@@ -38,14 +38,19 @@ describe('Nusumi Geometry Verification (11deg Taper + 0.4mm Undercut + R10)', ()
     it('should calculate verified accurate coordinates for all key points', () => {
         const result = calculator.calculate(profile)
 
+        console.log('\n=== Nusumi Geometry 計算結果 ===')
+        result.forEach((seg, i) => {
+            console.log(`Seg${i}: (${seg.compensatedStartX}, ${seg.compensatedStartZ}) -> (${seg.compensatedEndX}, ${seg.compensatedEndZ})`)
+        })
+
         // 1. 11度テーパーの終点 (凸角)
-        // 物理的に正しいプログラム座標
-        expect(result[0].compensatedEndX).toBeCloseTo(95.170, 3)
-        expect(result[0].compensatedEndZ).toBeCloseTo(-12.861, 3)
+        // bisector法（R*tan(θ/2)）による補正座標
+        expect(result[0].compensatedEndX).toBeCloseTo(94.289, 3)
+        expect(result[0].compensatedEndZ).toBeCloseTo(-13.315, 3)
 
         // 2. ぬすみ落ちの終点 (凹角)
-        expect(result[1].compensatedEndX).toBeCloseTo(94.2, 3)
-        expect(result[1].compensatedEndZ).toBeCloseTo(-12.861, 3)
+        expect(result[1].compensatedEndX).toBeCloseTo(93.4, 3)
+        expect(result[1].compensatedEndZ).toBeCloseTo(-13.261, 3)
 
         // 3. R10の終点 (プロファイル末端)
         expect(result[2].compensatedEndX).toBeCloseTo(94.968, 3)

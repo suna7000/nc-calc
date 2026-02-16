@@ -69,16 +69,16 @@ describe('NCプログラム出力整合性検証', () => {
             console.log('')
         })
 
-        // Segment 3 (隅R) の検証
-        const seg3 = result.segments[2]
-        console.log('*** Segment 3 (隅R) の検証 ***')
-        console.log(`  isConvex: ${seg3.isConvex}`)
-        console.log(`  gCode: ${seg3.gCode}`)
-        console.log(`  seg.compensated?.i: ${seg3.compensated?.i}`)
-        console.log(`  seg.compensated?.k: ${seg3.compensated?.k}`)
+        // Segment 4 (隅R2の最初) の検証
+        const seg4 = result.segments[3]
+        console.log('*** Segment 4 (隅R) の検証 ***')
+        console.log(`  isConvex: ${seg4.isConvex}`)
+        console.log(`  gCode: ${seg4.gCode}`)
+        console.log(`  seg.compensated?.i: ${seg4.compensated?.i}`)
+        console.log(`  seg.compensated?.k: ${seg4.compensated?.k}`)
 
         // 補正I/Kが設定されていることを確認
-        expect(seg3.compensated?.i).toBeDefined()
-        expect(seg3.compensated?.k).toBeDefined()
+        expect(seg4.compensated?.i).toBeDefined()
+        expect(seg4.compensated?.k).toBeDefined()
     })
 })

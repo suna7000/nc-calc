@@ -114,22 +114,28 @@ describe('ユーザー報告問題の再現', () => {
         const seg1WithNoseR = resultWithNoseR.segments[1]
 
         console.log('\n角Rセグメント（補正無効）:')
-        console.log(`  endX: ${seg1NoNoseR.endX}, endZ: ${seg1NoNoseR.endZ}`)
-        console.log(`  adjustedRadius: ${(seg1NoNoseR as any).radius}`)
+        console.log(`  ワークR: ${(seg1NoNoseR as any).radius}`)
+        console.log(`  補正R: ${seg1NoNoseR.compensated?.radius ?? 'なし'}`)
 
         console.log('\n角Rセグメント（補正有効）:')
-        console.log(`  endX: ${seg1WithNoseR.endX}, endZ: ${seg1WithNoseR.endZ}`)
-        console.log(`  adjustedRadius: ${(seg1WithNoseR as any).radius}`)
+        console.log(`  ワークR: ${(seg1WithNoseR as any).radius}`)
+        console.log(`  補正R: ${seg1WithNoseR.compensated?.radius ?? 'なし'}`)
+
+        // noseR有効時は、補正後のRが大きくなる（角R = 凸角の場合、R + noseR）
+        const workRadiusNoNoseR = (seg1NoNoseR as any).radius
+        const compensatedRadiusWithNoseR = seg1WithNoseR.compensated?.radius
 
         console.log('\n差分:')
-        console.log(`  endX差: ${seg1WithNoseR.endX - seg1NoNoseR.endX}`)
-        console.log(`  endZ差: ${seg1WithNoseR.endZ - seg1NoNoseR.endZ}`)
+        console.log(`  ワークR（補正無効）: ${workRadiusNoNoseR}`)
+        console.log(`  補正R（補正有効）: ${compensatedRadiusWithNoseR}`)
 
-        // noseR有効時は、Rが大きくなるので接点位置が変わるはず
-        const radiusDiff = (seg1WithNoseR as any).radius - (seg1NoNoseR as any).radius
-        console.log(`  radius差: ${radiusDiff}`)
-
-        // 期待: noseR有効時のRadiusは無効時より0.4大きい（角Rの場合）
-        expect(radiusDiff).toBeCloseTo(0.4, 2)
+        // 期待: 角R（凸角）の場合、補正後R = ワークR + noseR
+        if (compensatedRadiusWithNoseR !== undefined) {
+            const radiusDiff = compensatedRadiusWithNoseR - workRadiusNoNoseR
+            console.log(`  差分: ${radiusDiff}（期待値: 0.4 = noseR）`)
+            expect(radiusDiff).toBeCloseTo(0.4, 2)
+        } else {
+            throw new Error('補正Rが設定されていません')
+        }
     })
 })

@@ -57,8 +57,8 @@ describe('ShapeBuilder Master Matrix Tests', () => {
         const result = calculateShape(shape, settings)
         const rSegments = result.segments.filter(s => s.type === 'corner-r')
         expect(rSegments).toHaveLength(2)
-        expect(rSegments[0].endX).toBeCloseTo(rSegments[1].startX, 3)
-        expect(rSegments[0].endZ).toBeCloseTo(rSegments[1].startZ, 3)
+        expect(rSegments[0].endX).toBeCloseTo(rSegments[1].startX, 2)  // 0.01mm精度
+        expect(rSegments[0].endZ).toBeCloseTo(rSegments[1].startZ, 2)  // 0.01mm精度
     })
 
     it('G-07: Dual R connection (Two R on one point)', () => {

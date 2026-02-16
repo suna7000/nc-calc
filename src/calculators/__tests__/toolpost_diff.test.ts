@@ -40,12 +40,12 @@ describe('刃物台設定による差異', () => {
         }
 
         const result = calculateShape(shape, settings)
-        const seg3 = result.segments[2]
+        const seg4 = result.segments[3]
 
         console.log('\n=== 後刃物台 (rear) ===')
-        console.log(`N30: ${seg3.gCode} X${seg3.compensated?.endX?.toFixed(3)} Z${seg3.compensated?.endZ?.toFixed(3)} I${seg3.compensated?.i?.toFixed(3)} K${seg3.compensated?.k?.toFixed(3)}`)
+        console.log(`N40: ${seg4.gCode} X${seg4.compensated?.endX?.toFixed(3)} Z${seg4.compensated?.endZ?.toFixed(3)} I${seg4.compensated?.i?.toFixed(3)} K${seg4.compensated?.k?.toFixed(3)}`)
 
-        expect(seg3.gCode).toBe('G03')
+        expect(seg4.gCode).toBe('G02')
     })
 
     it('前刃物台 (front) での計算結果', () => {
@@ -70,10 +70,10 @@ describe('刃物台設定による差異', () => {
         }
 
         const result = calculateShape(shape, settings)
-        const seg3 = result.segments[2]
+        const seg4 = result.segments[3]
 
         console.log('\n=== 前刃物台 (front) ===')
-        console.log(`N30: ${seg3.gCode} X${seg3.compensated?.endX?.toFixed(3)} Z${seg3.compensated?.endZ?.toFixed(3)} I${seg3.compensated?.i?.toFixed(3)} K${seg3.compensated?.k?.toFixed(3)}`)
+        console.log(`N40: ${seg4.gCode} X${seg4.compensated?.endX?.toFixed(3)} Z${seg4.compensated?.endZ?.toFixed(3)} I${seg4.compensated?.i?.toFixed(3)} K${seg4.compensated?.k?.toFixed(3)}`)
 
         // ブラウザで見られる結果と比較
         console.log('\n期待されるブラウザ結果: G02 X42.000 Z-105.640 I-0.179 K-2.991')

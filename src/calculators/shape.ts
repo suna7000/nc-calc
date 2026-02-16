@@ -780,12 +780,19 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
             // Factory Manager Style: If input is Virtual Corner, allow R to extend beyond gap.
             // We will clip it later at the intersection.
             // Only necessity: Do not engage auto-shrink (Limit Check).
+            // 修正: 隣接ポイントにコーナーがある場合は、Expanded Mode を使わない（Auto-Shrink を適用）
             if ((finalSize > l2 * 0.999 && !nextHasCorner) || (finalSize > l1 * 0.999 && !prevHasCorner)) {
                 // Expanded Mode: Do not shrink tDist_req.
-                tDist_in = tDist_req
-                tDist_out = tDist_req
-                isExpanded = true
-                manualEntryZ = null
+                // ただし、隣接ポイントにコーナーがある場合は除外
+                if (!nextHasCorner && !prevHasCorner) {
+                    tDist_in = tDist_req
+                    tDist_out = tDist_req
+                    isExpanded = true
+                    manualEntryZ = null
+                } else {
+                    // 隣接コーナーがある場合は通常モード（Auto-Shrink適用）
+                    tDist_in = tDist_out = tDist_req
+                }
             } else {
                 tDist_in = tDist_out = tDist_req
             }

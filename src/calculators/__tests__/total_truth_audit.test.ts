@@ -39,20 +39,17 @@ describe('Total Truth Audit: 真理の証明', () => {
         const result = calculateShape({ points: [p0, p1, p2] }, testSettings)
         const comp = result.segments[1].compensated!
 
-        // --- tan(θ/2)修正後の真理計算 ---
-        // 修正前: dist = R / cos(θ/2) = 0.8 / 0.707 = 1.131
-        // 修正後: dist = R * tan(θ/2) = 0.8 * 1.0 = 0.8
+        // --- 教科書式による真理計算 ---
+        // 全セグメントが直線のため、教科書式を使用
         //
-        // 45度テーパーでのbisector計算:
-        // n1 = (1, 0), n2 = (0.707, 0.707)
-        // bisector方向: (1.707, 0.707) / len = (0.924, 0.383)
-        // offset = (0.924, 0.383) * 0.8 = (0.739, 0.306)
+        // セグメント1（垂直線 X100 Z10→0）:
+        // θ = 0° (垂直線)
+        // fz = R × (1 - tan(0°/2)) = R × (1 - 0) = R = 0.8mm
+        // 補正後終点: Z = 0 - 0.8 = -0.8mm
         //
-        // 工具中心点P: (50.8 + 0.739, 0 + 0.306) = (51.539, 0.306)
-        // プログラム点O: (51.539*2 - 1.6, 0.306 - 0.8) = (101.478, -0.494)
-        //
-        // 修正後の期待値: Z ≈ -0.673（実測値に基づく）
-        const expectedO_prime_z = -0.673
+        // セグメント2（45度テーパー X100→120 Z0→-10）の開始点は
+        // セグメント1の終点（補正後）: Z = -0.8mm
+        const expectedO_prime_z = -0.8
 
         console.log(`G-09 監査: 理論値 O'z=${expectedO_prime_z}, 実装値=${comp.startZ}`)
         expect(comp.startZ).toBeCloseTo(expectedO_prime_z, 2)

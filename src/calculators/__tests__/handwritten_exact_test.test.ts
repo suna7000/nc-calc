@@ -4,10 +4,10 @@ import { createPoint, noCorner } from '../../models/shape'
 import { defaultMachineSettings, type MachineSettings } from '../../models/settings'
 
 /**
- * 手書きメモの正確な条件で検証
- * 始点: X62 Z-44.508
- * 30°テーパー下り
- * 終点: X59.6 Z-46.586（期待値）
+ * 手書きメモの検証
+ * 注: 手書きメモのX62 Z-44.508は補正**後**の座標
+ * 元の図面座標: X60 Z-45.653 → X59.6 Z-46（30°テーパー）
+ * 補正後の期待値: X62 Z-44.508 → X59.6 Z-46.586
  */
 describe('手書きメモ完全再現テスト', () => {
     const settings: MachineSettings = {
@@ -29,28 +29,26 @@ describe('手書きメモ完全再現テスト', () => {
         },
     }
 
-    it('手書きメモの条件: X62 Z-44.508 → X59.6（30°テーパー）', () => {
-        // 始点のZ座標を計算
-        // ΔX = 62 - 59.6 = 2.4（直径）= 1.2（半径）
-        // 30°テーパー: tan(30°) ≈ 0.577
-        // ΔZ = 1.2 / tan(30°) = 1.2 / 0.577 ≈ 2.078
-        // 終点Z = -44.508 - 2.078 ≈ -46.586（これが手書き期待値！）
+    it('正しい30°テーパー: X60 Z-45.653 → X59.6（元座標）', () => {
+        // 正しい元の図面座標で計算
+        // X60 Z-45.653 → X59.6 Z-46 (30°テーパー)
+        // 教科書式: fz = R × (1 - tan(θ/2)) = 0.8 × (1 - tan(15°)) = 0.586mm
+        // 補正後終点: Z = -46 - 0.586 = -46.586mm
 
         const shape = {
             points: [
-                createPoint(62, 0, noCorner()),           // 初期位置
-                createPoint(62, -44.508, noCorner()),     // 始点（刃物が逃げた位置）
-                createPoint(59.6, -46.586, noCorner()),   // 終点（元座標）
+                createPoint(60, -45.653, noCorner()),     // 30°テーパー開始点（元座標）
+                createPoint(59.6, -46, noCorner()),       // テーパー終点（元座標）
                 createPoint(59.6, -50, noCorner())        // 次の点
             ]
         }
 
         const result = calculateShape(shape, settings)
 
-        console.log('\n=== 手書きメモ条件での計算結果 ===')
-        console.log('入力:')
-        console.log(`  始点: X62 Z-44.508`)
-        console.log(`  終点: X59.6 Z-46.586（元座標）`)
+        console.log('\n=== 正しい30°テーパーでの計算結果 ===')
+        console.log('元の図面座標:')
+        console.log(`  始点: X60 Z-45.653`)
+        console.log(`  終点: X59.6 Z-46`)
         console.log(`  テーパー角度: 30°`)
         console.log(`  ノーズR: 0.8`)
 
@@ -63,12 +61,12 @@ describe('手書きメモ完全再現テスト', () => {
             }
         })
 
-        // セグメント2（始点→終点）の補正後終点を確認
-        const seg = result.segments[1]
+        // セグメント1（30°テーパー）の補正後終点を確認
+        const seg = result.segments[0]
         const compZ = seg.compensated?.endZ ?? seg.endZ
         const compX = seg.compensated?.endX ?? seg.endX
 
-        console.log('\n=== 点3（テーパー終点）の補正座標 ===')
+        console.log('\n=== テーパー終点の補正座標 ===')
         console.log(`  X: ${compX.toFixed(3)}`)
         console.log(`  Z: ${compZ.toFixed(3)}`)
 
@@ -77,13 +75,12 @@ describe('手書きメモ完全再現テスト', () => {
 
         console.log(`\n誤差: ${(compZ - (-46.586)).toFixed(3)}mm`)
 
-        // 30°テーパーの理論値を計算
-        // fz = R × tan(θ/2) = 0.8 × tan(15°) ≈ 0.8 × 0.268 ≈ 0.214
-        const theoreticalFz = 0.8 * Math.tan(15 * Math.PI / 180)
-        console.log(`\n理論的なZ方向補正量（fz）: ${theoreticalFz.toFixed(3)}mm`)
+        // 教科書式の理論値
+        const theoreticalFz = 0.8 * (1 - Math.tan(15 * Math.PI / 180))
+        console.log(`\n教科書式Z方向補正量（fz）: ${theoreticalFz.toFixed(3)}mm`)
 
-        // 手書きメモと一致するか確認（0.01mm精度）
-        expect(compZ).toBeCloseTo(-46.586, 2)
+        // 手書きメモと一致するか確認（0.001mm精度）
+        expect(compZ).toBeCloseTo(-46.586, 3)
     })
 
     it('元のアプリ入力との比較', () => {

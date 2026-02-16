@@ -68,6 +68,102 @@ export class CenterTrackCalculator {
     calculate(profile: Segment[]): CompensatedSegment[] {
         if (profile.length === 0) return []
 
+        // 全セグメントが直線の場合、教科書式を使用
+        const allLines = profile.every(seg => seg.type === 'line')
+        if (allLines) {
+            return this.calculateWithTextbook(profile)
+        }
+
+        // 円弧を含む場合、bisector法を使用
+        return this.calculateWithBisector(profile)
+    }
+
+    /**
+     * 教科書式による補正計算（全セグメントが直線の場合）
+     */
+    private calculateWithTextbook(profile: Segment[]): CompensatedSegment[] {
+        const result: CompensatedSegment[] = []
+
+        for (let i = 0; i < profile.length; i++) {
+            const seg = profile[i]
+
+            // 開始点の補正座標を計算
+            let startX: number, startZ: number
+            if (i === 0) {
+                // 最初のセグメントの開始点は補正なし（アプローチ点）
+                startX = seg.startX
+                startZ = seg.startZ
+            } else {
+                // 前のセグメントの終点座標を使用
+                startX = result[i - 1].compensatedEndX
+                startZ = result[i - 1].compensatedEndZ
+            }
+
+            // 終点の補正座標を計算（教科書式）
+            const endX = seg.endX
+            const endZ = seg.endZ
+
+            // セグメントの方向ベクトルから角度を計算
+            const dx = (seg.endX - seg.startX) / 2  // 半径値
+            const dz = seg.endZ - seg.startZ
+            const len = Math.sqrt(dx * dx + dz * dz)
+
+            let compensatedEndX: number, compensatedEndZ: number
+
+            if (len < 1e-9) {
+                // 長さがゼロの場合は補正なし
+                compensatedEndX = endX
+                compensatedEndZ = endZ
+            } else {
+                // テーパー角度 θ
+                const theta = Math.atan2(Math.abs(dx), Math.abs(dz))
+                const halfTheta = theta / 2
+                const tanHalf = Math.tan(halfTheta)
+
+                // 教科書式: fz = R × (1 - tan(θ/2))（正刃の場合）
+                const fz = this.isExternal
+                    ? this.noseR * (1 - tanHalf)  // 正刃（外径）
+                    : this.noseR * (1 + tanHalf)  // 逆刃（内径）
+
+                // φ = 90° - θ
+                const phi = Math.PI / 2 - theta
+                const halfPhi = phi / 2
+                const tanHalfPhi = Math.tan(halfPhi)
+
+                // fx = 2R × (1 - tan(φ/2))（直径値）
+                const fx = 2 * this.noseR * (1 - tanHalfPhi)
+
+                // 上りテーパー/下りテーパーの判定
+                const isTaperingDown = dx < 0
+
+                // 教科書式の適用（-Z方向切削の場合）:
+                //   上りテーパー: O' = O - (fx, fz)
+                //   下りテーパー: O' = O + (fx, -fz)
+                if (isTaperingDown) {
+                    compensatedEndX = endX + fx
+                    compensatedEndZ = endZ - fz
+                } else {
+                    compensatedEndX = endX - fx
+                    compensatedEndZ = endZ - fz
+                }
+            }
+
+            result.push({
+                ...seg,
+                compensatedStartX: round3(startX),
+                compensatedStartZ: round3(startZ),
+                compensatedEndX: round3(compensatedEndX),
+                compensatedEndZ: round3(compensatedEndZ)
+            })
+        }
+
+        return result
+    }
+
+    /**
+     * Bisector法による補正計算（円弧を含む場合）
+     */
+    private calculateWithBisector(profile: Segment[]): CompensatedSegment[] {
         const nodes: { x: number, z: number, n: { nx: number, nz: number } }[] = []
         for (let i = 0; i <= profile.length; i++) {
             let n: { nx: number, nz: number }
@@ -78,20 +174,13 @@ export class CenterTrackCalculator {
             } else {
                 const n1 = this.getNormalAt(profile[i - 1], 'end')
                 const n2 = this.getNormalAt(profile[i], 'start')
-
-                // 直線-直線接続の場合、教科書式を使用
-                if (profile[i - 1].type === 'line' && profile[i].type === 'line') {
-                    n = this.calculateTextbookOffset(profile[i - 1], profile[i], n1, n2)
-                } else {
-                    const bisec = this.calculateBisector(n1, n2)
-                    n = { nx: bisec.bx * (bisec.dist / this.noseR), nz: bisec.bz * (bisec.dist / this.noseR) }
-                }
+                const bisec = this.calculateBisector(n1, n2)
+                n = { nx: bisec.bx * (bisec.dist / this.noseR), nz: bisec.bz * (bisec.dist / this.noseR) }
             }
 
             const refX = (i < profile.length ? profile[i].startX : profile[profile.length - 1].endX) / 2
             const refZ = (i < profile.length ? profile[i].startZ : profile[profile.length - 1].endZ)
 
-            // 補正オフセットを適用
             const px = refX + n.nx * this.noseR
             const pz = refZ + n.nz * this.noseR
             nodes.push({ x: px, z: pz, n })
