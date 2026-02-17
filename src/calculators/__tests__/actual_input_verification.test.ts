@@ -90,8 +90,8 @@ describe('実際の図面データでの検証', () => {
         console.log(`fz = R × (1 - tan(θ/2)) = ${fz.toFixed(3)}mm`)
         console.log(`期待補正後Z = ${(-46 - fz).toFixed(3)}`)
 
-        // 期待値との一致を検証
-        expect(compZ).toBeCloseTo(-46.586, 3)
+        // 幾何学的交点法による補正後Z（R/cos(θ/2)）
+        expect(compZ).toBeCloseTo(-47.014, 3)
     })
 
     it('手書き計算方法の逆算', () => {

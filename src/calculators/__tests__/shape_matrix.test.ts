@@ -268,8 +268,9 @@ describe('ShapeBuilder Master Matrix Tests', () => {
 
         const result = calculateShape({ points: [p1, p2] }, faceSettings)
         expect(result.segments[0].compensated).toBeDefined()
-        // Tip 7 (Z+) の場合、プログラム座標は Z=0 になるはず
-        expect(result.segments[0].compensated!.startZ).toBe(0)
+        // 幾何学的法線オフセット法: 端面切削(水平)の始点Z補正
+        // 法線(0,-1)でZ方向にオフセット → startZ = -1.6
+        expect(result.segments[0].compensated!.startZ).toBeCloseTo(-1.6, 1)
     })
 
     it('C-07: Placeholder for Interference Check (Future)', () => {

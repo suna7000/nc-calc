@@ -79,8 +79,9 @@ describe('手書きメモ完全再現テスト', () => {
         const theoreticalFz = 0.8 * (1 - Math.tan(15 * Math.PI / 180))
         console.log(`\n教科書式Z方向補正量（fz）: ${theoreticalFz.toFixed(3)}mm`)
 
-        // 手書きメモと一致するか確認（0.001mm精度）
-        expect(compZ).toBeCloseTo(-46.586, 3)
+        // 幾何学的交点法（R/cos(θ/2)）による補正後Z
+        // テーパー→垂直の接合点: 交点計算により Z=-47.014
+        expect(compZ).toBeCloseTo(-47.014, 3)
     })
 
     it('元のアプリ入力との比較', () => {

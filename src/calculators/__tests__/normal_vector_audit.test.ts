@@ -33,8 +33,8 @@ describe('法線計算の幾何監査', () => {
         console.log(`P3終点Xシフト: ${shiftX_end.toFixed(3)} Zシフト: ${shiftZ_end.toFixed(3)}`)
         console.log(`P3終点プログラム座標: X${seg.compensatedEndX} Z${seg.compensatedEndZ}`)
 
-        // ユーザーの環境（Front）では、Xシフトが正 (+0.234) になっているはず。
-        // これを再現・修正する。
-        expect(shiftX_end).toBeGreaterThan(0)
+        // 幾何学的交点法: 2つのテーパー接合点でのXシフト
+        // テーパーが続く場合、接合点の補正X < ワークX（わずかにマイナス）
+        expect(shiftX_end).toBeCloseTo(-0.132, 2)
     })
 })

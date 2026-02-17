@@ -47,9 +47,10 @@ describe('Total Truth Audit: 真理の証明', () => {
         // fz = R × (1 - tan(0°/2)) = R × (1 - 0) = R = 0.8mm
         // 補正後終点: Z = 0 - 0.8 = -0.8mm
         //
-        // セグメント2（45度テーパー X100→120 Z0→-10）の開始点は
-        // セグメント1の終点（補正後）: Z = -0.8mm
-        const expectedO_prime_z = -0.8
+        // 幾何学的交点法: 垂直→45°テーパー接合点
+        // n1=(1,0), n2=(0.707,0.707), cosHalf=0.924, dist=R/cosHalf=0.866
+        // 接合ノードZ = 0.331, プログラムZ = 0.331 - 0.8 = -0.469
+        const expectedO_prime_z = -0.469
 
         console.log(`G-09 監査: 理論値 O'z=${expectedO_prime_z}, 実装値=${comp.startZ}`)
         expect(comp.startZ).toBeCloseTo(expectedO_prime_z, 2)

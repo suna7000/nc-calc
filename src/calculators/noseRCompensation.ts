@@ -1,6 +1,7 @@
 /**
- * ノーズR補正計算モジュール (Normal Offset Method + FX/FZ Synchronization)
- * 2026/01/26 物理監査に基づく最終版
+ * ノーズR補正計算モジュール (Geometric Offset Intersection Method)
+ * 2026/02/12 幾何学的交点法による修正版
+ * dist = R / cos(θ/2) … 2本のオフセット線の交点距離（教科書: Peter Smid / ISO 補正理論）
  */
 
 export type SegmentType = 'line' | 'arc'
@@ -56,112 +57,22 @@ export class CenterTrackCalculator {
     private noseR: number;
     private toolType: number;
     private sideSign: number; // 外径: 1, 内径: -1
-    private isExternal: boolean; // 外径加工かどうか
 
     constructor(noseR: number, isExternal: boolean = true, toolType: number = 3) {
         this.noseR = noseR;
         this.toolType = toolType;
         this.sideSign = isExternal ? 1 : -1;
-        this.isExternal = isExternal;
     }
 
     calculate(profile: Segment[]): CompensatedSegment[] {
         if (profile.length === 0) return []
-
-        // 全セグメントが直線の場合、教科書式を使用
-        const allLines = profile.every(seg => seg.type === 'line')
-        if (allLines) {
-            return this.calculateWithTextbook(profile)
-        }
-
-        // 円弧を含む場合、bisector法を使用
         return this.calculateWithBisector(profile)
     }
 
     /**
-     * 教科書式による補正計算（全セグメントが直線の場合）
-     */
-    private calculateWithTextbook(profile: Segment[]): CompensatedSegment[] {
-        const result: CompensatedSegment[] = []
-
-        for (let i = 0; i < profile.length; i++) {
-            const seg = profile[i]
-
-            // 開始点の補正座標を計算
-            let startX: number, startZ: number
-            if (i === 0) {
-                // 最初のセグメントの開始点は補正なし（アプローチ点）
-                startX = seg.startX
-                startZ = seg.startZ
-            } else {
-                // 前のセグメントの終点座標を使用
-                startX = result[i - 1].compensatedEndX
-                startZ = result[i - 1].compensatedEndZ
-            }
-
-            // 終点の補正座標を計算（教科書式）
-            const endX = seg.endX
-            const endZ = seg.endZ
-
-            // セグメントの方向ベクトルから角度を計算
-            const dx = (seg.endX - seg.startX) / 2  // 半径値
-            const dz = seg.endZ - seg.startZ
-            const len = Math.sqrt(dx * dx + dz * dz)
-
-            let compensatedEndX: number, compensatedEndZ: number
-
-            if (len < 1e-9) {
-                // 長さがゼロの場合は補正なし
-                compensatedEndX = endX
-                compensatedEndZ = endZ
-            } else {
-                // テーパー角度 θ
-                const theta = Math.atan2(Math.abs(dx), Math.abs(dz))
-                const halfTheta = theta / 2
-                const tanHalf = Math.tan(halfTheta)
-
-                // 教科書式: fz = R × (1 - tan(θ/2))（正刃の場合）
-                const fz = this.isExternal
-                    ? this.noseR * (1 - tanHalf)  // 正刃（外径）
-                    : this.noseR * (1 + tanHalf)  // 逆刃（内径）
-
-                // φ = 90° - θ
-                const phi = Math.PI / 2 - theta
-                const halfPhi = phi / 2
-                const tanHalfPhi = Math.tan(halfPhi)
-
-                // fx = 2R × (1 - tan(φ/2))（直径値）
-                const fx = 2 * this.noseR * (1 - tanHalfPhi)
-
-                // 上りテーパー/下りテーパーの判定
-                const isTaperingDown = dx < 0
-
-                // 教科書式の適用（-Z方向切削の場合）:
-                //   上りテーパー: O' = O - (fx, fz)
-                //   下りテーパー: O' = O + (fx, -fz)
-                if (isTaperingDown) {
-                    compensatedEndX = endX + fx
-                    compensatedEndZ = endZ - fz
-                } else {
-                    compensatedEndX = endX - fx
-                    compensatedEndZ = endZ - fz
-                }
-            }
-
-            result.push({
-                ...seg,
-                compensatedStartX: round3(startX),
-                compensatedStartZ: round3(startZ),
-                compensatedEndX: round3(compensatedEndX),
-                compensatedEndZ: round3(compensatedEndZ)
-            })
-        }
-
-        return result
-    }
-
-    /**
-     * Bisector法による補正計算（円弧を含む場合）
+     * 幾何学的交点法による補正計算
+     * 各ノード(接続点)でのオフセット量 = R / cos(θ/2) … 2本のオフセット線の交点
+     * 端点ノードは法線方向へR（単純オフセット）
      */
     private calculateWithBisector(profile: Segment[]): CompensatedSegment[] {
         const nodes: { x: number, z: number, n: { nx: number, nz: number } }[] = []
@@ -223,16 +134,14 @@ export class CenterTrackCalculator {
     private calculateBisector(n1: { nx: number, nz: number }, n2: { nx: number, nz: number }): { dist: number, bx: number, bz: number } {
         const dot = Math.max(-1.0, Math.min(1.0, n1.nx * n2.nx + n1.nz * n2.nz))
         const cosHalf = Math.sqrt((1.0 + dot) / 2.0)
-        const sinHalf = Math.sqrt((1.0 - dot) / 2.0)
 
-        // 教科書式（nose_r_calculation_reference.md）:
-        // 正刃（外径加工）: dist = R × (1 - tan(θ/2))
-        // 逆刃（内径加工）: dist = R × (1 + tan(θ/2))
-        // Spike Guard: 180度反転等での発散防止
-        const tanHalf = sinHalf / Math.max(0.01, cosHalf)
-        const dist = this.isExternal
-            ? this.noseR * (1 - tanHalf)  // 正刃（外径）
-            : this.noseR * (1 + tanHalf)  // 逆刃（内径）
+        // 幾何学的交点法: dist = R / cos(θ/2)
+        // 2本の平行オフセット線の交点はコーナー点からcos(θ/2)分の距離にある
+        // Spike Guard: S字/U字ターン（法線が90°超で反転）では交点が発散するため
+        // 単純な垂直オフセット(R)を使用
+        const dist = (dot >= 0)
+            ? this.noseR / Math.max(0.01, cosHalf)  // 凸コーナー: 幾何学的交点
+            : this.noseR                              // S字/凹コーナー: 単純オフセット
 
         let bx = n1.nx + n2.nx, bz = n1.nz + n2.nz
         const len = Math.sqrt(bx * bx + bz * bz)

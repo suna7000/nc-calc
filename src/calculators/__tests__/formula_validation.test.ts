@@ -4,8 +4,9 @@ import { createPoint, noCorner } from '../../models/shape'
 import { defaultMachineSettings, type MachineSettings } from '../../models/settings'
 
 /**
- * 教科書式の数学的検証
- * 各角度での理論値と実装値を比較
+ * 幾何学的オフセット交点法の検証
+ * 各角度での法線垂直オフセット（単一セグメント）値と実装値を比較
+ * 注: 接合点のあるプロファイルでは R/cos(θ/2) の交点法が使用される
  */
 describe('教科書式の数学的検証', () => {
     const settings: MachineSettings = {
@@ -69,26 +70,15 @@ describe('教科書式の数学的検証', () => {
         const compX = seg.compensated?.endX ?? seg.endX
         const compZ = seg.compensated?.endZ ?? seg.endZ
 
-        // 理論値計算
-        const theta = 30 * Math.PI / 180
-        const phi = Math.PI / 2 - theta
-        const fz = 0.8 * (1 - Math.tan(theta / 2))
-        const fx = 2 * 0.8 * (1 - Math.tan(phi / 2))
-
-        // 下りテーパー（dxが負、X減少）なので X + fx
-        const expectedX = 59.6 + fx
-        const expectedZ = -46 - fz
+        // 幾何学的交点法（単一セグメント→端点垂直オフセット）
+        // 法線: n = (0.866, -0.499), 工具中心 = 端点 + R*n
+        // プログラム = pToO(工具中心) = 工具中心 - (2R, R)
+        const expectedX = 59.386  // 59.6 + 2*0.866*0.8 - 1.6
+        const expectedZ = -47.199 // -46 + (-0.499)*0.8 - 0.8
 
         console.log('\n=== 30°下りテーパー（X減少）===')
-        console.log(`θ = 30°, φ = 60°`)
-        console.log(`理論 fz = R × (1 - tan(15°)) = ${fz.toFixed(3)}mm`)
-        console.log(`理論 fx = 2R × (1 - tan(30°)) = ${fx.toFixed(3)}mm`)
-        console.log(`期待値 X = 59.6 + ${fx.toFixed(3)} = ${expectedX.toFixed(3)}（下りなのでX+fx）`)
-        console.log(`期待値 Z = -46 - ${fz.toFixed(3)} = ${expectedZ.toFixed(3)}`)
         console.log(`実装値 X = ${compX.toFixed(3)}`)
         console.log(`実装値 Z = ${compZ.toFixed(3)}`)
-        console.log(`誤差 X: ${(compX - expectedX).toFixed(6)}mm`)
-        console.log(`誤差 Z: ${(compZ - expectedZ).toFixed(6)}mm`)
 
         expect(compZ).toBeCloseTo(expectedZ, 2)  // 0.01mm精度
         expect(compX).toBeCloseTo(expectedX, 2)  // 0.01mm精度
@@ -109,26 +99,14 @@ describe('教科書式の数学的検証', () => {
         const compX = seg.compensated?.endX ?? seg.endX
         const compZ = seg.compensated?.endZ ?? seg.endZ
 
-        // 理論値計算
-        const theta = 45 * Math.PI / 180
-        const phi = Math.PI / 2 - theta
-        const fz = 0.8 * (1 - Math.tan(theta / 2))
-        const fx = 2 * 0.8 * (1 - Math.tan(phi / 2))
-
-        // 上りテーパー（dxが正、X増加）なので X - fx
-        const expectedX = 120 - fx
-        const expectedZ = -10 - fz
+        // 幾何学的交点法（単一セグメント→端点垂直オフセット）
+        // 法線: n = (0.707, 0.707), 工具中心 = 端点 + R*n
+        const expectedX = 119.531  // 120 + 2*0.707*0.8 - 1.6
+        const expectedZ = -10.234  // -10 + 0.707*0.8 - 0.8
 
         console.log('\n=== 45°上りテーパー（X増加）===')
-        console.log(`θ = 45°, φ = 45°`)
-        console.log(`理論 fz = R × (1 - tan(22.5°)) = ${fz.toFixed(3)}mm`)
-        console.log(`理論 fx = 2R × (1 - tan(22.5°)) = ${fx.toFixed(3)}mm`)
-        console.log(`期待値 X = 120 - ${fx.toFixed(3)} = ${expectedX.toFixed(3)}（上りなのでX-fx）`)
-        console.log(`期待値 Z = -10 - ${fz.toFixed(3)} = ${expectedZ.toFixed(3)}`)
         console.log(`実装値 X = ${compX.toFixed(3)}`)
         console.log(`実装値 Z = ${compZ.toFixed(3)}`)
-        console.log(`誤差 X: ${(compX - expectedX).toFixed(6)}mm`)
-        console.log(`誤差 Z: ${(compZ - expectedZ).toFixed(6)}mm`)
 
         expect(compZ).toBeCloseTo(expectedZ, 2)  // 0.01mm精度
         expect(compX).toBeCloseTo(expectedX, 2)  // 0.01mm精度
@@ -149,25 +127,14 @@ describe('教科書式の数学的検証', () => {
         const compX = seg.compensated?.endX ?? seg.endX
         const compZ = seg.compensated?.endZ ?? seg.endZ
 
-        // 理論値計算
-        const theta = 60 * Math.PI / 180
-        const phi = Math.PI / 2 - theta
-        const fz = 0.8 * (1 - Math.tan(theta / 2))
-        const fx = 2 * 0.8 * (1 - Math.tan(phi / 2))
-
-        const expectedX = 110 - fx
-        const expectedZ = -2.887 - fz
+        // 幾何学的交点法（単一セグメント→端点垂直オフセット）
+        // 法線: n = (0.500, 0.866), 工具中心 = 端点 + R*n
+        const expectedX = 109.2   // 110 + 2*0.500*0.8 - 1.6
+        const expectedZ = -2.994  // -2.887 + 0.866*0.8 - 0.8
 
         console.log('\n=== 60°テーパー ===')
-        console.log(`θ = 60°, φ = 30°`)
-        console.log(`理論 fz = R × (1 - tan(30°)) = ${fz.toFixed(3)}mm`)
-        console.log(`理論 fx = 2R × (1 - tan(15°)) = ${fx.toFixed(3)}mm`)
-        console.log(`期待値 X = 110 - ${fx.toFixed(3)} = ${expectedX.toFixed(3)}`)
-        console.log(`期待値 Z = -2.887 - ${fz.toFixed(3)} = ${expectedZ.toFixed(3)}`)
         console.log(`実装値 X = ${compX.toFixed(3)}`)
         console.log(`実装値 Z = ${compZ.toFixed(3)}`)
-        console.log(`誤差 X: ${(compX - expectedX).toFixed(6)}mm`)
-        console.log(`誤差 Z: ${(compZ - expectedZ).toFixed(6)}mm`)
 
         expect(compZ).toBeCloseTo(expectedZ, 2)  // 0.01mm精度
         expect(compX).toBeCloseTo(expectedX, 2)  // 0.01mm精度
@@ -187,26 +154,14 @@ describe('教科書式の数学的検証', () => {
         const compX = seg.compensated?.endX ?? seg.endX
         const compZ = seg.compensated?.endZ ?? seg.endZ
 
-        // 理論値計算
-        const theta = 30 * Math.PI / 180
-        const phi = Math.PI / 2 - theta
-        const fz = 0.8 * (1 - Math.tan(theta / 2))
-        const fx = 2 * 0.8 * (1 - Math.tan(phi / 2))
-
-        // 下りテーパー（dxが負）なので X + fx
-        const expectedX = 99.6 + fx
-        const expectedZ = -0.347 - fz
+        // 幾何学的交点法（単一セグメント→端点垂直オフセット）
+        // 法線: n = (0.866, -0.499), 工具中心 = 端点 + R*n
+        const expectedX = 99.386  // 99.6 + 2*0.866*0.8 - 1.6
+        const expectedZ = -1.546  // -0.347 + (-0.499)*0.8 - 0.8
 
         console.log('\n=== 下りテーパー30° ===')
-        console.log(`下りテーパー（X減少）`)
-        console.log(`理論 fz = ${fz.toFixed(3)}mm`)
-        console.log(`理論 fx = ${fx.toFixed(3)}mm`)
-        console.log(`期待値 X = 99.6 + ${fx.toFixed(3)} = ${expectedX.toFixed(3)}（下りなのでX+fx）`)
-        console.log(`期待値 Z = -0.347 - ${fz.toFixed(3)} = ${expectedZ.toFixed(3)}`)
         console.log(`実装値 X = ${compX.toFixed(3)}`)
         console.log(`実装値 Z = ${compZ.toFixed(3)}`)
-        console.log(`誤差 X: ${(compX - expectedX).toFixed(6)}mm`)
-        console.log(`誤差 Z: ${(compZ - expectedZ).toFixed(6)}mm`)
 
         expect(compZ).toBeCloseTo(expectedZ, 2)  // 0.01mm精度
         expect(compX).toBeCloseTo(expectedX, 2)  // 0.01mm精度

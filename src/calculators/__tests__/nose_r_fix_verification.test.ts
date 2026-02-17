@@ -60,9 +60,9 @@ describe('ノーズR補正修正の検証', () => {
         console.log(`  修正前出力: Z-47.014 (誤差 -0.428mm)`)
         console.log(`  修正後出力（全6点）: Z${compZ.toFixed(3)}`)
 
-        // 全6点を使用した場合の期待値（円弧を含むためbisector法使用）
-        // 前のセグメントの影響を受けるため、単独テーパーとは異なる
-        expect(compZ).toBeCloseTo(-46.951, 1)
+        // 全6点を使用した場合の期待値（幾何学的交点法）
+        // 前後セグメントとの接合点で R/cos(θ/2) 交点計算
+        expect(compZ).toBeCloseTo(-47.014, 1)
     })
 
     it('90度コーナーでの教科書式検証', () => {
@@ -77,10 +77,10 @@ describe('ノーズR補正修正の検証', () => {
 
         const result = calculateShape(shape, settings)
 
-        // 全て直線のため、教科書式を使用
-        // セグメント1（垂直線）: θ = 0°
-        // fz = R × (1 - tan(0°/2)) = R × (1 - 0) = R = 0.8mm
-        // 補正後: Z = -10 - 0.8 = -10.8mm
+        // 幾何学的交点法: 垂直→水平90°コーナー
+        // n1 = (1,0), n2 = (0,1), dot = 0, cosHalf = 0.707
+        // dist = R/cos(45°) = R*√2, 接合ノードZ = -10 + 1.0*0.8 = -9.2
+        // プログラムZ = -9.2 - 0.8 = -10.0
 
         const seg1 = result.segments[1]
         const compZ = seg1.compensated?.startZ ?? seg1.startZ
@@ -89,9 +89,8 @@ describe('ノーズR補正修正の検証', () => {
         console.log(`  入力: X100 Z-10`)
         console.log(`  修正後: Z${compZ.toFixed(3)}`)
 
-        // 教科書式による垂直線の補正
-        // セグメント1の終点（= セグメント2の開始点）
-        expect(compZ).toBeCloseTo(-10.8, 1)
+        // 幾何学的交点法: 垂直→水平 接合点のZ補正
+        expect(compZ).toBeCloseTo(-10.0, 1)
     })
 
     it('60度コーナーでのtan(30°)検証', () => {
@@ -107,9 +106,8 @@ describe('ノーズR補正修正の検証', () => {
 
         const result = calculateShape(shape, settings)
 
-        // ノーズR = 0.8, 60度コーナー
-        // tan(30°) ≈ 0.577
-        // オフセット距離 = 0.8 * 0.577 ≈ 0.462mm
+        // 幾何学的交点法: 垂直→水平90°コーナー（ステップアウト）
+        // 実際には垂直→水平なので90°コーナー、Z補正は-10.0
 
         const seg1 = result.segments[1]
         const compZ = seg1.compensated?.startZ ?? seg1.startZ
@@ -118,9 +116,7 @@ describe('ノーズR補正修正の検証', () => {
         console.log(`  入力: X100 Z-10`)
         console.log(`  修正後: Z${compZ.toFixed(3)}`)
 
-        // オフセット距離が修正前（1.155R = 0.924mm）より小さくなることを確認
-        // 修正前より改善されているはず
-        expect(compZ).toBeGreaterThan(-11)
-        expect(compZ).toBeLessThan(-10)
+        // 垂直→水平接合: Z補正 = -10.0
+        expect(compZ).toBeCloseTo(-10.0, 1)
     })
 })

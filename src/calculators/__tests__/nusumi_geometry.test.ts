@@ -43,14 +43,13 @@ describe('Nusumi Geometry Verification (11deg Taper + 0.4mm Undercut + R10)', ()
             console.log(`Seg${i}: (${seg.compensatedStartX}, ${seg.compensatedStartZ}) -> (${seg.compensatedEndX}, ${seg.compensatedEndZ})`)
         })
 
-        // 1. 11度テーパーの終点 (凸角)
-        // bisector法（R*tan(θ/2)）による補正座標
-        expect(result[0].compensatedEndX).toBeCloseTo(94.289, 3)
-        expect(result[0].compensatedEndZ).toBeCloseTo(-13.315, 3)
+        // 1. 11度テーパーの終点 (凸角) - 幾何学的交点法 R/cos(θ/2)
+        expect(result[0].compensatedEndX).toBeCloseTo(94.859, 3)
+        expect(result[0].compensatedEndZ).toBeCloseTo(-13.661, 3)
 
-        // 2. ぬすみ落ちの終点 (凹角)
-        expect(result[1].compensatedEndX).toBeCloseTo(93.4, 3)
-        expect(result[1].compensatedEndZ).toBeCloseTo(-13.261, 3)
+        // 2. ぬすみ落ちの終点 (凹角) - S字接続のため単純垂直オフセット
+        expect(result[1].compensatedEndX).toBeCloseTo(94.2, 3)
+        expect(result[1].compensatedEndZ).toBeCloseTo(-13.661, 3)
 
         // 3. R10の終点 (プロファイル末端)
         expect(result[2].compensatedEndX).toBeCloseTo(94.968, 3)
