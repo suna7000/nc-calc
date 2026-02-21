@@ -4,7 +4,8 @@
 
 ## 関連ドキュメント
 
-- **[bisector_method_z_offset_implementation.md](./bisector_method_z_offset_implementation.md)** - Bisector Method実装における条件付きZ方向オフセットの詳細（2026年2月検証済み、全97テストパス）
+- **[bisector_method_z_offset_implementation.md](./bisector_method_z_offset_implementation.md)** - 実装ノート：本プロジェクト特有の条件付きZ方向オフセット（外径加工・Tip3のみで検証済み、全97テストパス）
+  - ⚠️ 注意：本実装特有の観察結果であり、一般理論ではありません
 
 ## 情報源
 
