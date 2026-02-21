@@ -2,7 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**Important**: Always respond in Japanese (日本語) when working in this repository.
+**Important**:
+- Always respond in Japanese (日本語) when working in this repository
+- Think in English, but always answer in Japanese (英語で考え、日本語で答えること)
+- **Commit changes every time** after completing work (作業完了後は必ずコミットすること)
+  - Use descriptive commit messages in English
+  - Include "Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" in commit messages
+  - Stage relevant files with `git add` before committing
+  - Verify changes with `git diff` before committing
 
 ## Project Overview
 
