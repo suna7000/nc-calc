@@ -2,6 +2,10 @@
 
 このドキュメントはNC旋盤のノーズR補正における座標計算式をまとめたものです。
 
+## 関連ドキュメント
+
+- **[bisector_method_z_offset_implementation.md](./bisector_method_z_offset_implementation.md)** - Bisector Method実装における条件付きZ方向オフセットの詳細（2026年2月検証済み、全97テストパス）
+
 ## 情報源
 
 | ソース | 内容 | URL |

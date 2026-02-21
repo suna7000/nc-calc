@@ -171,3 +171,28 @@ Extensive domain knowledge in `docs/`:
 - When modifying corner calculations, verify against test fixtures in `adjacent_corners.test.ts`
 - G02/G03 determination depends on `toolPost` and `cuttingDirection` settings
 - For nose R changes, consult `noseRCompensation.ts` comments and `nose_r_compensation_reference.md`
+
+### Critical Implementation Detail: Conditional Z-Offset in Bisector Method
+
+**Location**: `src/calculators/noseRCompensation.ts` → `pToO()` function
+
+**Important Discovery** (Verified Feb 2026, 97 tests passing):
+
+When using the Bisector Method for nose radius compensation, the Z-direction offset in P→O conversion varies by geometry type:
+
+- **Convex arcs (角R)**: `dz = 0` (bisector calculation already handles Z-direction)
+- **Concave arcs (隅R) & Lines**: `dz = noseR` (full offset required)
+
+**Implementation**:
+```typescript
+const dz = isConvex ? 0 : noseR
+```
+
+**Validation**:
+- All 97 tests pass
+- Error vs hand-calculated: ±0.034mm (8.5% of noseR 0.4mm)
+- Details: `docs/bisector_method_z_offset_implementation.md`
+
+**Why this isn't in public literature**: This is an implementation-level detail specific to the bisector method. Standard CNC literature describes the user perspective (O→P), while we implement the reverse (P→O). CAM software vendors keep internal algorithms proprietary.
+
+⚠️ **Do NOT modify this logic without consulting the documentation and verification tests.**
