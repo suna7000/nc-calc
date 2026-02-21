@@ -202,3 +202,8 @@ const dz = isConvex ? 0 : noseR
 **Details**: `docs/bisector_method_z_offset_implementation.md`
 
 ⚠️ **This is specific to our implementation. Do NOT generalize to other bisector algorithms or apply to untested conditions without independent verification.**
+
+**Future Work & Known Limitations**: See `docs/bisector_z_offset_future_validation.md` for:
+- Unvalidated areas (internal turning, other tool tips, reversed direction)
+- Theoretical gaps (P coordinate definition, general solution derivation)
+- Recommended validation roadmap and priority tasks
