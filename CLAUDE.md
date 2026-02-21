@@ -162,6 +162,10 @@ Extensive domain knowledge in `docs/`:
 - `nc_knowledge_base.md`: NC lathe fundamentals, G-codes, tooling
 - `nose_r_compensation_reference.md`: Theoretical basis for compensation algorithms
 - `corner_r_calculation.md`: Corner treatment geometry
+- `bisector_algorithm_mathematical_analysis.md`: Mathematical proof of bisector P coordinate calculation
+- `bisector_general_solution.md`: General solution for conditional Z-offset (bz-based)
+- `bisector_method_z_offset_implementation.md`: Implementation notes for conditional dz
+- `bisector_z_offset_future_validation.md`: Unvalidated areas and future work roadmap
 - `handover_*.md`: Historical context on specific fixes/features
 
 ## Development Guidelines
@@ -176,17 +180,27 @@ Extensive domain knowledge in `docs/`:
 
 **Location**: `src/calculators/noseRCompensation.ts` → `pToO()` function
 
-**Implementation Note** (Verified Feb 2026, 97 tests passing):
+**Implementation Note** (Mathematically verified Feb 2026, 97 tests passing):
 
 In our specific Bisector Method implementation, the Z-direction offset in P→O conversion uses conditional logic:
 
 - **Convex arcs (角R)**: `dz = 0`
 - **Concave arcs (隅R) & Lines**: `dz = noseR`
 
-**Implementation**:
+**Current Implementation**:
 ```typescript
 const dz = isConvex ? 0 : noseR
 ```
+
+**Mathematical Foundation** (2026-02-21):
+- **Proven Causality**: `P = ref + b̂ × dist` where `b̂` is normalized bisector direction
+- **Z Component**: `Pz = refZ + bz × dist`
+- **General Solution**: `dz = (|bz| < ε) ? 0 : noseR` where `bz` is bisector's Z component
+- **Physical Meaning**: When normals are horizontal (bz≈0), no additional Z offset needed
+
+**See**:
+- `docs/bisector_algorithm_mathematical_analysis.md` - Mathematical proof with numerical verification
+- `docs/bisector_general_solution.md` - General solution derivation (bz-based)
 
 **Validated for**:
 - External turning (外径加工) only
