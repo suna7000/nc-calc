@@ -38,15 +38,17 @@ function round3(v: number): number {
  * プログラム点 O = P - V_offset
  * 物理監査結果: Tip 3 (外径/前) は V_offset.z = noseR, oz = pz - noseR (Zマイナス方向へシフト)
  */
-export function pToO(px: number, pz: number, noseR: number, toolType: number): { ox: number; oz: number } {
+export function pToO(px: number, pz: number, noseR: number, toolType: number, isConvex: boolean = true): { ox: number; oz: number } {
     let dx = 0, dz = 0
     switch (toolType) {
-        case 3: dx = noseR; dz = noseR; break;    // 外径 / 前向き
-        case 4: dx = noseR; dz = -noseR; break;   // 外径 / 奥向き
-        case 2: dx = -noseR; dz = noseR; break;   // 内径 / 前向き
-        case 1: dx = -noseR; dz = -noseR; break;  // 内径 / 奥向き
+        // For convex corners (角R): no Z offset (bisector handles it)
+        // For concave corners (隅R): apply Z offset
+        case 3: dx = noseR; dz = isConvex ? 0 : noseR; break;    // 外径 / 前向き
+        case 4: dx = noseR; dz = isConvex ? 0 : -noseR; break;   // 外径 / 奥向き
+        case 2: dx = -noseR; dz = isConvex ? 0 : noseR; break;   // 内径 / 前向き
+        case 1: dx = -noseR; dz = isConvex ? 0 : -noseR; break;  // 内径 / 奥向き
         case 8: dx = noseR; dz = 0; break;
-        default: dx = noseR; dz = noseR;
+        default: dx = noseR; dz = isConvex ? 0 : noseR;
     }
     const ox = px - (dx * 2)
     const oz = pz - dz
@@ -102,8 +104,18 @@ export class CenterTrackCalculator {
             const seg = profile[i]
             const sNode = nodes[i], eNode = nodes[i + 1]
 
-            const startO = pToO(sNode.x * 2, sNode.z, this.noseR, this.toolType)
-            const endO = pToO(eNode.x * 2, eNode.z, this.noseR, this.toolType)
+            // Z offset logic for bisector method:
+            // - Convex arcs (角R): bisector handles it perfectly, no additional Z offset (isConvex=true → dz=0)
+            // - Concave arcs (隅R): need additional Z offset (isConvex=false → dz=noseR)
+            // - Lines: also need additional Z offset (isConvex=false → dz=noseR)
+
+            // Only convex arcs should have isConvex=true (no Z offset)
+            // Everything else (concave arcs and lines) should have isConvex=false (apply Z offset)
+            const startIsConvex = (seg.type === 'arc' && seg.isConvex !== false)
+            const endIsConvex = (seg.type === 'arc' && seg.isConvex !== false)
+
+            const startO = pToO(sNode.x * 2, sNode.z, this.noseR, this.toolType, startIsConvex)
+            const endO = pToO(eNode.x * 2, eNode.z, this.noseR, this.toolType, endIsConvex)
 
             let cR = seg.radius
             let cCX = seg.centerX
@@ -112,7 +124,7 @@ export class CenterTrackCalculator {
             if (seg.type === 'arc' && seg.radius !== undefined && seg.centerX !== undefined && seg.centerZ !== undefined) {
                 const isConvex = seg.isConvex !== false
                 cR = isConvex ? (seg.radius + this.noseR) : Math.abs(seg.radius - this.noseR)
-                const centerProg = pToO(seg.centerX, seg.centerZ, this.noseR, this.toolType)
+                const centerProg = pToO(seg.centerX, seg.centerZ, this.noseR, this.toolType, isConvex)
                 cCX = centerProg.ox
                 cCZ = centerProg.oz
             }
