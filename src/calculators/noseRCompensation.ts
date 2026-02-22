@@ -37,37 +37,54 @@ function round3(v: number): number {
 /**
  * ハイブリッド dz 計算（改良版）
  *
+ * 前提: 現行bisector実装 b̂ = normalize(n̂₁ + n̂₂) および P = ref + b̂ × dist に依存
+ *
  * Task 1-2-3 の検証結果 + 凹円弧の特殊ケースを考慮
  *
  * ルール:
- * 1. 凹円弧（隅R）: 常に dz=noseR×sign （bzに関係なく）
- * 2. 凸円弧（角R）or 直線: bzで判定
+ * 1. 端面工具（Tip 8）: 常に dz=0 （特例）
+ * 2. 凹円弧（隅R）: 常に dz=noseR×sign （bzに関係なく）
+ * 3. 凸円弧（角R）or 直線: bzで判定
  *    - |bz| < threshold → dz=0 （法線が水平）
  *    - |bz| ≥ threshold → dz=noseR×sign
  *
  * @param bisec - bisector計算結果 { bz: number, ... }
  * @param noseR - ノーズ半径
- * @param toolType - 工具チップ番号 (1-4, 8)
+ * @param tipNumber - 工具チップ番号 (1-4, 8)
  * @param isConvex - 凹円弧判定（false=凹円弧、true=凸円弧 or 直線）
+ *                   暫定: Phase 2 互換ガード、将来的には bisec のみに統一予定
  * @returns dz - Z方向オフセット量
  */
 function calculateDzFromBisector(
     bisec: { bz: number },
     noseR: number,
-    toolType: number,
+    tipNumber: number,
     isConvex: boolean = true
 ): number {
-    // チップ番号の符号テーブル
-    //           [0,  1,  2,  3,  4,  5, 6, 7, 8]
-    const dzSign = [0, -1, +1, +1, -1,  0, 0, 0, 0]
-    const sign = dzSign[toolType] || +1
+    // 堅牢性チェック: bisec未定義またはbz=NaNの場合はフォールバック
+    if (!bisec || !Number.isFinite(bisec.bz)) {
+        const dzSign = [0, -1, +1, +1, -1]
+        const sign = dzSign[tipNumber] || +1
+        return noseR * sign
+    }
 
-    // 凹円弧は常にオフセット必要（Phase 2 で判明した制約）
+    // 特例: 端面工具（Tip 8）は常にdz=0
+    if (tipNumber === 8) {
+        return 0
+    }
+
+    // チップ番号の符号テーブル（Tip 1-4）
+    //           [0,  1,  2,  3,  4]
+    const dzSign = [0, -1, +1, +1, -1]
+    const sign = dzSign[tipNumber] || +1
+
+    // ルール2: 凹円弧は常にオフセット必要（Phase 2 で判明した制約）
     if (isConvex === false) {
         return noseR * sign
     }
 
-    // 凸円弧 or 直線: bzで判定
+    // ルール3: 凸円弧 or 直線: bzで判定
+    // bzThreshold = 0.01: 倍精度浮動小数点 + 正規化誤差マージン
     const bzThreshold = 0.01
     const bzAbs = Math.abs(bisec.bz)
 
