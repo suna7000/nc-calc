@@ -176,48 +176,53 @@ Extensive domain knowledge in `docs/`:
 - G02/G03 determination depends on `toolPost` and `cuttingDirection` settings
 - For nose R changes, consult `noseRCompensation.ts` comments and `nose_r_compensation_reference.md`
 
-### Critical Implementation Detail: Conditional Z-Offset in Bisector Method
+### Critical Implementation Detail: Hybrid Z-Offset Solution (Phase 2 Complete)
 
-**Location**: `src/calculators/noseRCompensation.ts` → `pToO()` function
+**Location**: `src/calculators/noseRCompensation.ts` → `calculateDzFromBisector()` function
 
-**Implementation Note** (Mathematically verified Feb 2026, 97 tests passing):
+**Status** (2026-02-21): ✅ Phase 2 Complete - Hybrid solution implemented and validated (108 tests passing)
 
-In our specific Bisector Method implementation, the Z-direction offset in P→O conversion uses conditional logic:
+**Hybrid Solution** combines bisector Z-component (bz) analysis with concave arc handling:
 
-- **Convex arcs (角R)**: `dz = 0`
-- **Concave arcs (隅R) & Lines**: `dz = noseR`
-
-**Current Implementation**:
 ```typescript
-const dz = isConvex ? 0 : noseR
+// Rule 1: Concave arcs (隅R) always need offset
+if (isConvex === false) return noseR × sign
+
+// Rule 2: Convex arcs (角R) & Lines use bz-based detection
+if (|bz| < 0.01) return 0      // Horizontal normals
+else return noseR × sign        // Angled normals
 ```
 
-**Mathematical Foundation** (2026-02-21):
-- **Proven Causality**: `P = ref + b̂ × dist` where `b̂` is normalized bisector direction
-- **Z Component**: `Pz = refZ + bz × dist`
-- **General Solution**: `dz = (|bz| < ε) ? 0 : noseR` where `bz` is bisector's Z component
-- **Physical Meaning**: When normals are horizontal (bz≈0), no additional Z offset needed
+**Why Hybrid?**
+- **Pure bz-based fails for concave arcs**: Even when bz≈0, concave arcs need offset (tool must reach into concave region)
+- **Works perfectly for convex arcs & lines**: bz-based detection eliminates most isConvex dependencies
+- **Best of both worlds**: Mathematical foundation + practical edge case handling
 
-**See**:
-- `docs/bisector_algorithm_mathematical_analysis.md` - Mathematical proof with numerical verification
-- `docs/bisector_general_solution.md` - General solution derivation (bz-based)
+**Mathematical Foundation**:
+- **Formula**: `P = ref + b̂ × dist`, therefore `Pz = refZ + bz × dist`
+- **Numerical proof**: bz × dist = Pz - refZ (-0.7068 × 0.4 = -0.2827mm, exact match)
+- **Causality**: When normals are horizontal (bz≈0), Pz≈refZ, so no additional Z offset needed
 
-**Validated for**:
-- External turning (外径加工) only
-- Tool Tip 3 only
-- Rear tool post, -Z cutting direction
-- All 97 tests pass: ±0.034mm error (8.5% of noseR 0.4mm)
+**Validation Results** (Tasks 1-3 + Phase 2):
+- ✅ Direction reversal (Task 3-1): Solution is direction-invariant
+- ✅ Internal turning (Task 3-2): Works for external/internal (sideSign reversal)
+- ✅ Other tool tips (Task 3-3): bz value independent of tip number
+- ✅ Concave arcs (Phase 2): Hybrid approach handles edge case
+- ✅ **All 108 tests pass** (97 existing + 9 new + 2 others)
 
-**NOT validated for**:
-- Internal turning
-- Other tool tip numbers (1, 2, 4, 8)
-- Reversed cutting direction or other tool post configurations
+**Key Documents**:
+- `docs/bisector_general_solution_verified.md` - Complete verification report (⭐ START HERE)
+- `docs/bisector_algorithm_mathematical_analysis.md` - Mathematical proof
+- `docs/phase2_implementation_plan.md` - Implementation details
+- `docs/bisector_method_z_offset_implementation.md` - Original implementation notes
 
-**Details**: `docs/bisector_method_z_offset_implementation.md`
+**Benefits Over Pure isConvex**:
+- ✅ Eliminates isConvex for convex arcs & lines (majority of cases)
+- ✅ Direction-invariant (works forward and backward)
+- ✅ Works for internal/external turning
+- ✅ All tool tip numbers supported
+- ⚠️ Still uses isConvex for concave arc detection (necessary constraint)
 
-⚠️ **This is specific to our implementation. Do NOT generalize to other bisector algorithms or apply to untested conditions without independent verification.**
-
-**Future Work & Known Limitations**: See `docs/bisector_z_offset_future_validation.md` for:
-- Unvalidated areas (internal turning, other tool tips, reversed direction)
-- Theoretical gaps (P coordinate definition, general solution derivation)
-- Recommended validation roadmap and priority tasks
+**Next Steps (Phase 3)**:
+- Monitor in production with `USE_BZ_BASED_DZ = true`
+- Consider geometric curvature detection to eliminate final isConvex dependency
