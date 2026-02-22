@@ -35,21 +35,94 @@ function round3(v: number): number {
 }
 
 /**
+ * ハイブリッド dz 計算（改良版）
+ *
+ * Task 1-2-3 の検証結果 + 凹円弧の特殊ケースを考慮
+ *
+ * ルール:
+ * 1. 凹円弧（隅R）: 常に dz=noseR×sign （bzに関係なく）
+ * 2. 凸円弧（角R）or 直線: bzで判定
+ *    - |bz| < threshold → dz=0 （法線が水平）
+ *    - |bz| ≥ threshold → dz=noseR×sign
+ *
+ * @param bisec - bisector計算結果 { bz: number, ... }
+ * @param noseR - ノーズ半径
+ * @param toolType - 工具チップ番号 (1-4, 8)
+ * @param isConvex - 凹円弧判定（false=凹円弧、true=凸円弧 or 直線）
+ * @returns dz - Z方向オフセット量
+ */
+function calculateDzFromBisector(
+    bisec: { bz: number },
+    noseR: number,
+    toolType: number,
+    isConvex: boolean = true
+): number {
+    // チップ番号の符号テーブル
+    //           [0,  1,  2,  3,  4,  5, 6, 7, 8]
+    const dzSign = [0, -1, +1, +1, -1,  0, 0, 0, 0]
+    const sign = dzSign[toolType] || +1
+
+    // 凹円弧は常にオフセット必要（Phase 2 で判明した制約）
+    if (isConvex === false) {
+        return noseR * sign
+    }
+
+    // 凸円弧 or 直線: bzで判定
+    const bzThreshold = 0.01
+    const bzAbs = Math.abs(bisec.bz)
+
+    if (bzAbs < bzThreshold) {
+        return 0  // 法線が水平 → 追加Z方向オフセット不要
+    } else {
+        return noseR * sign  // 符号付きオフセット量
+    }
+}
+
+// フラグ: bz ベースの一般解を使用するか（デフォルトは false = 既存動作）
+const USE_BZ_BASED_DZ = true  // Phase 2 検証: 一般解をテスト
+
+/**
  * プログラム点 O = P - V_offset
  * 物理監査結果: Tip 3 (外径/前) は V_offset.z = noseR, oz = pz - noseR (Zマイナス方向へシフト)
+ *
+ * @param isConvexOrBisec - 既存: boolean (isConvex), 新規: { bisec: { bz: number }, isConvex: boolean }
  */
-export function pToO(px: number, pz: number, noseR: number, toolType: number, isConvex: boolean = true): { ox: number; oz: number } {
+export function pToO(
+    px: number,
+    pz: number,
+    noseR: number,
+    toolType: number,
+    isConvexOrBisec: boolean | { bisec: { bz: number }, isConvex: boolean } = true
+): { ox: number; oz: number } {
     let dx = 0, dz = 0
+
+    // dx の計算（変更なし）
     switch (toolType) {
-        // For convex corners (角R): no Z offset (bisector handles it)
-        // For concave corners (隅R): apply Z offset
-        case 3: dx = noseR; dz = isConvex ? 0 : noseR; break;    // 外径 / 前向き
-        case 4: dx = noseR; dz = isConvex ? 0 : -noseR; break;   // 外径 / 奥向き
-        case 2: dx = -noseR; dz = isConvex ? 0 : noseR; break;   // 内径 / 前向き
-        case 1: dx = -noseR; dz = isConvex ? 0 : -noseR; break;  // 内径 / 奥向き
-        case 8: dx = noseR; dz = 0; break;
-        default: dx = noseR; dz = isConvex ? 0 : noseR;
+        case 2:
+        case 1:
+            dx = -noseR
+            break
+        default:
+            dx = noseR
     }
+
+    // dz の計算（新旧切り替え）
+    if (USE_BZ_BASED_DZ && typeof isConvexOrBisec === 'object' && 'bisec' in isConvexOrBisec) {
+        // 新実装: ハイブリッド解（bz + 凹円弧判定）
+        dz = calculateDzFromBisector(isConvexOrBisec.bisec, noseR, toolType, isConvexOrBisec.isConvex)
+    } else {
+        // 既存実装: isConvex ベース
+        const isConvex = typeof isConvexOrBisec === 'boolean' ? isConvexOrBisec : true
+        switch (toolType) {
+            case 3: dz = isConvex ? 0 : noseR; break;    // 外径 / 前向き
+            case 4: dz = isConvex ? 0 : -noseR; break;   // 外径 / 奥向き
+            case 2: dz = isConvex ? 0 : noseR; break;    // 内径 / 前向き
+            case 1: dz = isConvex ? 0 : -noseR; break;   // 内径 / 奥向き
+            case 8: dz = 0; break;
+            default: dz = isConvex ? 0 : noseR;
+        }
+    }
+
     const ox = px - (dx * 2)
     const oz = pz - dz
     return { ox: round3(ox), oz: round3(oz) }
@@ -77,9 +150,17 @@ export class CenterTrackCalculator {
      * 端点ノードは法線方向へR（単純オフセット）
      */
     private calculateWithBisector(profile: Segment[]): CompensatedSegment[] {
-        const nodes: { x: number, z: number, n: { nx: number, nz: number } }[] = []
+        const nodes: {
+            x: number,
+            z: number,
+            n: { nx: number, nz: number },
+            bisec?: { bx: number, bz: number, dist: number }  // 一般解用に保存
+        }[] = []
+
         for (let i = 0; i <= profile.length; i++) {
             let n: { nx: number, nz: number }
+            let bisec: { bx: number, bz: number, dist: number } | undefined
+
             if (i === 0) {
                 n = this.getNormalAt(profile[0], 'start')
             } else if (i === profile.length) {
@@ -87,7 +168,7 @@ export class CenterTrackCalculator {
             } else {
                 const n1 = this.getNormalAt(profile[i - 1], 'end')
                 const n2 = this.getNormalAt(profile[i], 'start')
-                const bisec = this.calculateBisector(n1, n2)
+                bisec = this.calculateBisector(n1, n2)  // 保存用に変数化
                 n = { nx: bisec.bx * (bisec.dist / this.noseR), nz: bisec.bz * (bisec.dist / this.noseR) }
             }
 
@@ -96,7 +177,9 @@ export class CenterTrackCalculator {
 
             const px = refX + n.nx * this.noseR
             const pz = refZ + n.nz * this.noseR
-            nodes.push({ x: px, z: pz, n })
+
+            // bisec 情報を含めて保存
+            nodes.push({ x: px, z: pz, n, bisec })
         }
 
         const result: CompensatedSegment[] = []
@@ -114,8 +197,16 @@ export class CenterTrackCalculator {
             const startIsConvex = (seg.type === 'arc' && seg.isConvex !== false)
             const endIsConvex = (seg.type === 'arc' && seg.isConvex !== false)
 
-            const startO = pToO(sNode.x * 2, sNode.z, this.noseR, this.toolType, startIsConvex)
-            const endO = pToO(eNode.x * 2, eNode.z, this.noseR, this.toolType, endIsConvex)
+            // フラグで切り替え: USE_BZ_BASED_DZ = true なら bisec + isConvex を渡す
+            const startParam = (USE_BZ_BASED_DZ && sNode.bisec)
+                ? { bisec: sNode.bisec, isConvex: startIsConvex }
+                : startIsConvex
+            const endParam = (USE_BZ_BASED_DZ && eNode.bisec)
+                ? { bisec: eNode.bisec, isConvex: endIsConvex }
+                : endIsConvex
+
+            const startO = pToO(sNode.x * 2, sNode.z, this.noseR, this.toolType, startParam)
+            const endO = pToO(eNode.x * 2, eNode.z, this.noseR, this.toolType, endParam)
 
             let cR = seg.radius
             let cCX = seg.centerX
