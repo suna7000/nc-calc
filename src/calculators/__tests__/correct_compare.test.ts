@@ -37,7 +37,23 @@ describe('正しい比較：手書きメモ vs アプリ', () => {
 
         const result = calculateShape(shape, settings)
 
+        console.log('\n=== 全セグメント出力 ===\n')
+        result.segments.forEach((seg, i) => {
+            console.log(`Seg${i}: ${seg.type}`)
+            if (seg.compensated) {
+                console.log(`  補正始点: X${seg.compensated.startX.toFixed(3)} Z${seg.compensated.startZ.toFixed(3)}`)
+                console.log(`  補正終点: X${seg.compensated.endX.toFixed(3)} Z${seg.compensated.endZ.toFixed(3)}`)
+            }
+        })
+
         console.log('\n=== NC座標の詳細比較 ===\n')
+
+        // 角R0.5の前の直線セグメント
+        const lineBefore = result.segments.find(s => s.type === 'line' && s.endZ === -115)
+        if (lineBefore?.compensated) {
+            console.log('【角R0.5の前の直線】')
+            console.log(`  補正終点: X${lineBefore.compensated.endX.toFixed(3)} Z${lineBefore.compensated.endZ.toFixed(3)}`)
+        }
 
         // 角R0.5 (arc 1)
         const arc1 = result.segments.find(s => s.type === 'corner-r' && s.isConvex && s.radius === 0.5)

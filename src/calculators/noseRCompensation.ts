@@ -16,6 +16,7 @@ export interface Segment {
     centerZ?: number
     radius?: number
     isConvex?: boolean
+    angle?: number  // テーパー角度（度）: 直線セグメントの場合
 }
 
 export interface CompensatedSegment extends Segment {
@@ -32,6 +33,48 @@ export interface CompensatedSegment extends Segment {
 
 function round3(v: number): number {
     return Math.round(v * 1000) / 1000
+}
+
+/**
+ * テーパー線専用のdz計算（ユーザー記事の数式）
+ *
+ * 記事1-2の数式:
+ * - 上りテーパー（直径減少）: fz = R × (1 - tan(θ/2))
+ * - 下りテーパー（直径増加）: fz = R × (1 + tan(θ/2))
+ *
+ * 重要: 「上り/下り」は直径の変化で判定（Z方向ではない）
+ *
+ * @param angle - テーパー角度（度）: 水平からの角度
+ * @param noseR - ノーズR半径
+ * @param tipNumber - チップ番号
+ * @param isDiameterIncreasing - 直径が増加するテーパーかどうか
+ * @returns dz - Z方向補正量（符号付き）
+ */
+function calculateDzForTaper(
+    angle: number,
+    noseR: number,
+    tipNumber: number,
+    isDiameterIncreasing: boolean
+): number {
+    // Tip 8（端面工具）: 常にdz=0
+    if (tipNumber === 8) {
+        return 0
+    }
+
+    // チップ番号の符号テーブル
+    const dzSign = [0, -1, +1, +1, -1]
+    const sign = dzSign[tipNumber] || +1
+
+    // θ/2 をラジアンで計算
+    const thetaRad = (angle * Math.PI) / 180
+    const halfAngleRad = thetaRad / 2
+
+    // fz = R × (1 ± tan(θ/2))
+    const factor = isDiameterIncreasing
+        ? (1 + Math.tan(halfAngleRad))  // 下りテーパー（直径増加）
+        : (1 - Math.tan(halfAngleRad))  // 上りテーパー（直径減少）
+
+    return noseR * factor * sign
 }
 
 /**
@@ -162,16 +205,19 @@ export class CenterTrackCalculator {
     }
 
     /**
-     * 幾何学的交点法による補正計算
-     * 各ノード(接続点)でのオフセット量 = R / cos(θ/2) … 2本のオフセット線の交点
-     * 端点ノードは法線方向へR（単純オフセット）
+     * 幾何学的交点法による補正計算（ノードベース版）
+     *
+     * 重要な変更: dzをノードごとに1回だけ計算し、連続性を保証
+     * - 同じノードを共有するセグメントは同じO座標を使用
+     * - セグメントタイプではなく、ノードの幾何（bisector.bz）で判定
      */
     private calculateWithBisector(profile: Segment[]): CompensatedSegment[] {
+        // Step 1: P座標（工具中心点）の計算
         const nodes: {
             x: number,
             z: number,
             n: { nx: number, nz: number },
-            bisec?: { bx: number, bz: number, dist: number }  // 一般解用に保存
+            bisec?: { bx: number, bz: number, dist: number }
         }[] = []
 
         for (let i = 0; i <= profile.length; i++) {
@@ -179,14 +225,42 @@ export class CenterTrackCalculator {
             let bisec: { bx: number, bz: number, dist: number } | undefined
 
             if (i === 0) {
-                n = this.getNormalAt(profile[0], 'start')
+                const seg = profile[0]
+                // テーパー線の場合：P座標に垂直オフセットを含めない（fzで全て補正）
+                if (seg.type === 'line' && seg.angle !== undefined && seg.angle !== 0 && seg.angle !== 90) {
+                    n = { nx: 0, nz: 0 }
+                } else {
+                    n = this.getNormalAt(seg, 'start')
+                }
             } else if (i === profile.length) {
-                n = this.getNormalAt(profile[profile.length - 1], 'end')
+                const seg = profile[profile.length - 1]
+                // テーパー線の場合：P座標に垂直オフセットを含めない（fzで全て補正）
+                if (seg.type === 'line' && seg.angle !== undefined && seg.angle !== 0 && seg.angle !== 90) {
+                    n = { nx: 0, nz: 0 }
+                } else {
+                    n = this.getNormalAt(seg, 'end')
+                }
             } else {
-                const n1 = this.getNormalAt(profile[i - 1], 'end')
-                const n2 = this.getNormalAt(profile[i], 'start')
-                bisec = this.calculateBisector(n1, n2)  // 保存用に変数化
-                n = { nx: bisec.bx * (bisec.dist / this.noseR), nz: bisec.bz * (bisec.dist / this.noseR) }
+                // 接続点ノード: 前後のセグメントを確認
+                const prevSeg = profile[i - 1]
+                const nextSeg = profile[i]
+
+                // ⭐ テーパー線の場合: P座標は幾何座標そのまま（垂直オフセットなし）
+                // 記事の fz = R×(1±tan(θ/2)) が合計補正量なので、P座標にオフセットを含めない
+                const prevIsTaper = prevSeg.type === 'line' && prevSeg.angle !== undefined && prevSeg.angle !== 0 && prevSeg.angle !== 90
+                const nextIsTaper = nextSeg.type === 'line' && nextSeg.angle !== undefined && nextSeg.angle !== 0 && nextSeg.angle !== 90
+
+                if (prevIsTaper || nextIsTaper) {
+                    // テーパー線：垂直オフセットなし（n = 0ベクトル相当）
+                    // fz補正だけを dz で適用する
+                    n = { nx: 0, nz: 0 }
+                } else {
+                    // 通常のBisector計算
+                    const n1 = this.getNormalAt(profile[i - 1], 'end')
+                    const n2 = this.getNormalAt(profile[i], 'start')
+                    bisec = this.calculateBisector(n1, n2)
+                    n = { nx: bisec.bx * (bisec.dist / this.noseR), nz: bisec.bz * (bisec.dist / this.noseR) }
+                }
             }
 
             const refX = (i < profile.length ? profile[i].startX : profile[profile.length - 1].endX) / 2
@@ -195,35 +269,116 @@ export class CenterTrackCalculator {
             const px = refX + n.nx * this.noseR
             const pz = refZ + n.nz * this.noseR
 
-            // bisec 情報を含めて保存
             nodes.push({ x: px, z: pz, n, bisec })
         }
 
+        // Step 2: ノードごとのO座標を事前計算（連続性保証）
+        const nodeO: { ox: number, oz: number }[] = []
+
+        for (let i = 0; i <= profile.length; i++) {
+            const node = nodes[i]
+            const px = node.x * 2
+            const pz = node.z
+
+            // dx計算（チップ番号依存）
+            const dx = (this.toolType === 2 || this.toolType === 1) ? -this.noseR : this.noseR
+
+            // dz計算（ノードベース - これが重要！）
+            let dz: number
+
+            if (USE_BZ_BASED_DZ) {
+                // 端点ノード
+                if (i === 0 || i === profile.length) {
+                    const seg = (i === 0) ? profile[0] : profile[profile.length - 1]
+
+                    // ⭐ テーパー線の場合: 記事の数式を使用
+                    if (seg.type === 'line' && seg.angle !== undefined && seg.angle !== 0 && seg.angle !== 90) {
+                        // 直径が増加するか減少するかを判定
+                        const isDiameterIncreasing = seg.endX > seg.startX
+                        dz = calculateDzForTaper(seg.angle, this.noseR, this.toolType, isDiameterIncreasing)
+                    } else {
+                        const isConvex = (seg.type === 'arc' && seg.isConvex !== false)
+                        dz = calculateDzFromBisector(
+                            node.bisec ?? { bz: 0 },
+                            this.noseR,
+                            this.toolType,
+                            isConvex
+                        )
+                    }
+                }
+                // 接続点ノード（重要: 両側のセグメントを考慮）
+                else {
+                    const prevSeg = profile[i - 1]
+                    const nextSeg = profile[i]
+
+                    // ⭐ どちらかがテーパー線の場合: 記事の数式を使用
+                    const prevIsTaper = prevSeg.type === 'line' && prevSeg.angle !== undefined && prevSeg.angle !== 0 && prevSeg.angle !== 90
+                    const nextIsTaper = nextSeg.type === 'line' && nextSeg.angle !== undefined && nextSeg.angle !== 0 && nextSeg.angle !== 90
+
+                    if (prevIsTaper || nextIsTaper) {
+                        // テーパー接続点: テーパーセグメントの直径変化で判定
+                        const taperSeg = prevIsTaper ? prevSeg : nextSeg
+                        const isDiameterIncreasing = taperSeg.endX > taperSeg.startX
+                        dz = calculateDzForTaper(taperSeg.angle!, this.noseR, this.toolType, isDiameterIncreasing)
+                    } else {
+                        // 直線が接続している場合（重要な発見！）
+                        // 直線セグメントには常に標準的なノーズR補正が必要
+                        // bisec.bz = 0 でも dz = noseR を適用する
+                        const hasLine = (prevSeg.type === 'line' || nextSeg.type === 'line')
+
+                        // 凹円弧が接続している場合（Phase 2の発見）
+                        const hasConcaveArc =
+                            (prevSeg.type === 'arc' && prevSeg.isConvex === false) ||
+                            (nextSeg.type === 'arc' && nextSeg.isConvex === false)
+
+                        // 直線または凹円弧が関与 → 常にオフセット必要
+                        // 両方が凸円弧の場合のみ → bz判定
+                        if (hasLine || hasConcaveArc) {
+                            dz = calculateDzFromBisector(
+                                node.bisec!,
+                                this.noseR,
+                                this.toolType,
+                                false  // isConvex=false → 常にdz=noseR
+                            )
+                        } else {
+                            // 両方が凸円弧の接続 → bz判定を使用
+                            dz = calculateDzFromBisector(
+                                node.bisec!,
+                                this.noseR,
+                                this.toolType,
+                                true  // isConvex=true → bz判定でdz決定
+                            )
+                        }
+                    }
+                }
+            } else {
+                // 旧実装との互換性（USE_BZ_BASED_DZ = false）
+                const seg = (i < profile.length) ? profile[i] : profile[profile.length - 1]
+                const isConvex = (seg.type === 'arc' && seg.isConvex !== false)
+
+                switch (this.toolType) {
+                    case 3: dz = isConvex ? 0 : this.noseR; break;
+                    case 4: dz = isConvex ? 0 : -this.noseR; break;
+                    case 2: dz = isConvex ? 0 : this.noseR; break;
+                    case 1: dz = isConvex ? 0 : -this.noseR; break;
+                    case 8: dz = 0; break;
+                    default: dz = isConvex ? 0 : this.noseR;
+                }
+            }
+
+            const ox = px - (dx * 2)
+            const oz = pz - dz
+            nodeO.push({ ox: round3(ox), oz: round3(oz) })
+        }
+
+        // Step 3: セグメントの補正座標を構築（事前計算済みnodeOを使用）
         const result: CompensatedSegment[] = []
         for (let i = 0; i < profile.length; i++) {
             const seg = profile[i]
-            const sNode = nodes[i], eNode = nodes[i + 1]
 
-            // Z offset logic for bisector method:
-            // - Convex arcs (角R): bisector handles it perfectly, no additional Z offset (isConvex=true → dz=0)
-            // - Concave arcs (隅R): need additional Z offset (isConvex=false → dz=noseR)
-            // - Lines: also need additional Z offset (isConvex=false → dz=noseR)
-
-            // Only convex arcs should have isConvex=true (no Z offset)
-            // Everything else (concave arcs and lines) should have isConvex=false (apply Z offset)
-            const startIsConvex = (seg.type === 'arc' && seg.isConvex !== false)
-            const endIsConvex = (seg.type === 'arc' && seg.isConvex !== false)
-
-            // フラグで切り替え: USE_BZ_BASED_DZ = true なら bisec + isConvex を渡す
-            const startParam = (USE_BZ_BASED_DZ && sNode.bisec)
-                ? { bisec: sNode.bisec, isConvex: startIsConvex }
-                : startIsConvex
-            const endParam = (USE_BZ_BASED_DZ && eNode.bisec)
-                ? { bisec: eNode.bisec, isConvex: endIsConvex }
-                : endIsConvex
-
-            const startO = pToO(sNode.x * 2, sNode.z, this.noseR, this.toolType, startParam)
-            const endO = pToO(eNode.x * 2, eNode.z, this.noseR, this.toolType, endParam)
+            // 事前計算済みのO座標を使用（連続性が保証される）
+            const startO = nodeO[i]
+            const endO = nodeO[i + 1]
 
             let cR = seg.radius
             let cCX = seg.centerX
@@ -239,8 +394,10 @@ export class CenterTrackCalculator {
 
             result.push({
                 ...seg,
-                compensatedStartX: startO.ox, compensatedStartZ: startO.oz,
-                compensatedEndX: endO.ox, compensatedEndZ: endO.oz,
+                compensatedStartX: startO.ox,
+                compensatedStartZ: startO.oz,
+                compensatedEndX: endO.ox,
+                compensatedEndZ: endO.oz,
                 compensatedRadius: cR !== undefined ? round3(cR) : undefined,
                 compensatedCenterX: cCX !== undefined ? round3(cCX) : undefined,
                 compensatedCenterZ: cCZ !== undefined ? round3(cCZ) : undefined,
@@ -254,14 +411,13 @@ export class CenterTrackCalculator {
     private calculateBisector(n1: { nx: number, nz: number }, n2: { nx: number, nz: number }): { dist: number, bx: number, bz: number } {
         const dot = Math.max(-1.0, Math.min(1.0, n1.nx * n2.nx + n1.nz * n2.nz))
         const cosHalf = Math.sqrt((1.0 + dot) / 2.0)
+        const sinHalf = Math.sqrt((1.0 - dot) / 2.0)
 
-        // 幾何学的交点法: dist = R / cos(θ/2)
-        // 2本の平行オフセット線の交点はコーナー点からcos(θ/2)分の距離にある
-        // Spike Guard: S字/U字ターン（法線が90°超で反転）では交点が発散するため
-        // 単純な垂直オフセット(R)を使用
-        const dist = (dot >= 0)
-            ? this.noseR / Math.max(0.01, cosHalf)  // 凸コーナー: 幾何学的交点
-            : this.noseR                              // S字/凹コーナー: 単純オフセット
+        // 修正: dist = R * tan(θ/2) でテーパー補正の精度が向上
+        // tan(θ/2) = sin(θ/2) / cos(θ/2)
+        // Spike Guard: 180度反転等での発散防止（cos→0で分母保護）
+        const tanHalf = sinHalf / Math.max(0.01, cosHalf)
+        const dist = this.noseR * tanHalf
 
         let bx = n1.nx + n2.nx, bz = n1.nz + n2.nz
         const len = Math.sqrt(bx * bx + bz * bz)

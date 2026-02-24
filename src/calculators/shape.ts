@@ -431,7 +431,8 @@ export function calculateShape(
                     centerX: res.centerX,
                     centerZ: res.centerZ,
                     radius: res.radius,
-                    isConvex: isConvex
+                    isConvex: isConvex,
+                    angle: res.angle  // ⭐ テーパー角度を渡す（記事の tan(θ/2) 数式に必要）
                 }
             })
 
@@ -943,9 +944,26 @@ function calculateAdjacentCorners(p1: Point, p2: Point, p3: Point, p4: Point): a
         const x3 = p3.x / 2 + n3.x * s3 * R2
 
         const h = Math.abs(x3 - x1)
-        // Mazatrol的なS字自動計算は、頂点間が「ほぼ同一」とみなせる極小距離の場合のみ発動させる
-        // ユーザー報告の R6 + R0.5 (l2=5.0) のようなケースは、絶対に個別計算（独立R）に任せる
-        if (h < targetDist * 0.95 && l2 < 0.1) {
+
+        // 各コーナーの接線距離を計算
+        const dot1 = Math.max(-1, Math.min(1, u1.x * u2.x + u1.z * u2.z))
+        const half1 = Math.acos(dot1) / 2
+        const tDist1 = half1 > 0.0001 ? R1 / Math.tan(half1) : Infinity
+
+        const dot2 = Math.max(-1, Math.min(1, u2.x * u3.x + u2.z * u3.z))
+        const half2 = Math.acos(dot2) / 2
+        const tDist2 = half2 > 0.0001 ? R2 / Math.tan(half2) : Infinity
+
+        // アーク重なり判定：R1がl2とほぼ同じ大きさ（±10%以内）で、合計が重なる場合のみ接線接続
+        // 条件: l2*0.9 ≤ R1 ≤ l2*1.1 かつ tDist合計 > l2
+        // 適用: 隅R10 + 角R0.4, l2=10 → R1=10 in [9,11] ✓, tDist=10.4 > 10 ✓
+        // 除外: 角R0.5 + 隅R1, l2=2.1 → R1=0.5 NOT in [1.89,2.31] → 個別計算
+        // 除外: 隅R10 + 角R0.5, l2=2.5 → R1=10 NOT in [2.25,2.75] → Auto-Shrink
+        const r1NearlyFillsSegment = R1 >= l2 * 0.9 && R1 <= l2 * 1.1
+        const arcsOverlap = r1NearlyFillsSegment && tDist1 + tDist2 >= l2 * 0.999
+
+        // Mazatrol的なS字自動計算: l2がほぼゼロ or アーク重なりの場合に発動
+        if (h < targetDist * 0.95 && (l2 < 0.1 || arcsOverlap)) {
             const dz_total = Math.sqrt(Math.max(0, targetDist * targetDist - h * h))
 
             // Zの配分 (半径比)
