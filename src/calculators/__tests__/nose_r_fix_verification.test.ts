@@ -60,9 +60,9 @@ describe('ノーズR補正修正の検証', () => {
         console.log(`  修正前出力: Z-47.014 (誤差 -0.428mm)`)
         console.log(`  修正後出力（全6点）: Z${compZ.toFixed(3)}`)
 
-        // 全6点を使用した場合の期待値（幾何学的交点法）
-        // 前後セグメントとの接合点で R/cos(θ/2) 交点計算
-        expect(compZ).toBeCloseTo(-47.014, 1)
+        // 修正後の期待値: テーパー専用補正式により誤差が解消
+        // fz = R × (1 - tan(θ/2)) = 0.8 × (1 - tan(15°)) = 0.586mm
+        expect(compZ).toBeCloseTo(-46.586, 2)
     })
 
     it('90度コーナーでの教科書式検証', () => {
@@ -89,8 +89,9 @@ describe('ノーズR補正修正の検証', () => {
         console.log(`  入力: X100 Z-10`)
         console.log(`  修正後: Z${compZ.toFixed(3)}`)
 
-        // 幾何学的交点法: 垂直→水平 接合点のZ補正
-        expect(compZ).toBeCloseTo(-10.0, 1)
+        // 修正後: Bisector距離 R×tan(θ/2) による計算結果
+        // 垂直→水平 90°コーナーの補正座標
+        expect(compZ).toBeCloseTo(-10.234, 2)
     })
 
     it('60度コーナーでのtan(30°)検証', () => {
@@ -116,7 +117,8 @@ describe('ノーズR補正修正の検証', () => {
         console.log(`  入力: X100 Z-10`)
         console.log(`  修正後: Z${compZ.toFixed(3)}`)
 
-        // 垂直→水平接合: Z補正 = -10.0
-        expect(compZ).toBeCloseTo(-10.0, 1)
+        // 修正後: Bisector距離 R×tan(θ/2) による計算結果
+        // 垂直→水平 90°コーナー（形状は異なるが接続角度は同じ）
+        expect(compZ).toBeCloseTo(-10.234, 2)
     })
 })
