@@ -156,6 +156,12 @@ The application uses a point-based shape building approach inspired by MAZATROL 
 - Continuous corner R may produce unusual coordinates if S-curve threshold too loose
 - Zero-gap R-R connections require special handling
 
+### Recently Fixed Issues (Reference for Future Work)
+- ✅ **Taper line compensation error** (2026-02-24): -0.428mm systematic error in 30° taper lines
+  - Root causes: angle info loss, wrong bisector formula, double offset application
+  - Solution: Taper-specific fz formula with n={0,0} approach
+  - See: `docs/nose_r_fix_2026-02-24/` for complete analysis
+
 ## Documentation
 
 Extensive domain knowledge in `docs/`:
@@ -176,7 +182,78 @@ Extensive domain knowledge in `docs/`:
 - G02/G03 determination depends on `toolPost` and `cuttingDirection` settings
 - For nose R changes, consult `noseRCompensation.ts` comments and `nose_r_compensation_reference.md`
 
-### Critical Implementation Detail: Hybrid Z-Offset Solution (Phase 2 Complete)
+### Critical Implementation Detail 1: Taper Line Compensation Fix (2026-02-24)
+
+**Location**: `src/calculators/noseRCompensation.ts` → `calculateDzForTaper()` and node calculation
+
+**Status** (2026-02-24): ✅ Complete - Taper compensation error eliminated (-0.428mm → 0.000mm)
+
+**Problem**: 30° taper lines had systematic -0.428mm error due to:
+1. ❌ `angle` information lost in shape.ts → noseRCompensation.ts transfer
+2. ❌ Bisector distance using `R/cos(θ/2)` instead of `R×tan(θ/2)`
+3. ❌ No taper-specific compensation function (fz formula)
+4. ❌ Bisector method distorting straight line segments
+5. ❌ Double application: perpendicular offset + fz
+
+**Solution - Taper-Specific Approach**:
+```typescript
+// 1. Taper detection
+function isTaperSegment(seg: Segment): boolean {
+    return seg.type === 'line' &&
+           seg.angle !== undefined &&
+           seg.angle !== 0 &&
+           seg.angle !== 90
+}
+
+// 2. For taper segments: n = {0, 0} (NO perpendicular offset)
+if (isTaperSegment(seg)) {
+    n = { nx: 0, nz: 0 }  // P coordinate = geometric coordinate
+}
+
+// 3. Taper-specific dz using fz formula
+function calculateDzForTaper(angle, noseR, tipNumber, isDiameterIncreasing) {
+    const thetaRad = (angle * Math.PI) / 180
+    const halfAngleRad = thetaRad / 2
+    const factor = isDiameterIncreasing
+        ? (1 + Math.tan(halfAngleRad))  // Descending: fz = R(1+tan(θ/2))
+        : (1 - Math.tan(halfAngleRad))  // Ascending: fz = R(1-tan(θ/2))
+    return noseR * factor * sign
+}
+
+// 4. Direction by DIAMETER change (NOT Z coordinate)
+const isDiameterIncreasing = seg.endX > seg.startX
+```
+
+**Key Concepts**:
+- **fz is TOTAL compensation** (not additional): includes perpendicular offset component
+- **Taper coordinate model**: P = geometric (no offset), O = P - fz
+- **Non-taper coordinate model**: P = geometric + perpendicular offset, O = P - dz
+- **Direction terminology**: "Ascending taper" = diameter decreasing (上りテーパー)
+
+**Bisector Distance Fix**:
+```typescript
+// ❌ Wrong: R/cos(θ/2) - overestimates by 41% for 90° corner
+const dist = noseR / Math.max(0.01, cosHalf)
+
+// ✅ Correct: R×tan(θ/2)
+const sinHalf = Math.sqrt((1.0 - dot) / 2.0)
+const tanHalf = sinHalf / Math.max(0.01, cosHalf)
+const dist = noseR * tanHalf
+```
+
+**Critical Documents**:
+- `docs/nose_r_fix_2026-02-24/完全ドキュメント_改訂版.md` - Complete analysis (⭐ START HERE)
+- `docs/nose_r_fix_2026-02-24/README.md` - Executive summary
+- `docs/quick_reference.md` - DO/DON'T quick reference
+
+**Validation**:
+- ✅ User's hand calculation (proven by actual machining): Z-46.586
+- ✅ App output after fix: Z-46.586 (0.000mm error)
+- ✅ Segment shape preserved (30° angle maintained)
+
+---
+
+### Critical Implementation Detail 2: Hybrid Z-Offset Solution (Phase 2 Complete)
 
 **Location**: `src/calculators/noseRCompensation.ts` → `calculateDzFromBisector()` function
 
