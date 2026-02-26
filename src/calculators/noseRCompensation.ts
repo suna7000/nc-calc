@@ -173,23 +173,6 @@ export class CenterTrackCalculator {
     }
 
     /**
-     * テーパー専用オフセット計算（HP方式/Peter Smid）
-     * fz = R × (1 - tan(θ/2))
-     * @param taperAngle テーパー角度（度）
-     * @param pos 'start' または 'end' - テーパーのどちら端か
-     * @returns Z方向オフセット量
-     */
-    private calculateTaperOffset(taperAngle: number, pos: 'start' | 'end'): number {
-        // テーパーの終点のみ特殊計算が必要（始点は通常のオフセット）
-        if (pos === 'start') {
-            return 0
-        }
-        const angleRad = taperAngle * Math.PI / 180
-        const fz = this.noseR * (1 - Math.tan(angleRad / 2))
-        return fz
-    }
-
-    /**
      * 幾何学的交点法による補正計算
      * 各ノード(接続点)でのオフセット量 = R × tan(θ/2) … 2本のオフセット線の交点
      * 端点ノードは法線方向へR（単純オフセット）
