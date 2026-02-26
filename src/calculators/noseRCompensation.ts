@@ -1,7 +1,7 @@
 /**
  * ノーズR補正計算モジュール (Geometric Offset Intersection Method)
  * 2026/02/12 幾何学的交点法による修正版
- * dist = R / cos(θ/2) … 2本のオフセット線の交点距離（教科書: Peter Smid / ISO 補正理論）
+ * 2026/02/26 数学的誤り修正: dist = R × tan(θ/2) （教科書: Peter Smid / ISO 補正理論）
  */
 
 export type SegmentType = 'line' | 'arc'
@@ -12,6 +12,7 @@ export interface Segment {
     startZ: number
     endX: number
     endZ: number
+    angle?: number       // テーパー角度（直線の場合）
     centerX?: number
     centerZ?: number
     radius?: number
@@ -162,41 +163,92 @@ export class CenterTrackCalculator {
     }
 
     /**
+     * テーパー判定: 0°と90°以外の角度を持つ直線セグメント
+     */
+    private isTaper(seg: Segment): boolean {
+        return seg.type === 'line' &&
+               seg.angle !== undefined &&
+               seg.angle !== 0 &&
+               seg.angle !== 90
+    }
+
+    /**
+     * テーパー専用オフセット計算（HP方式/Peter Smid）
+     * fz = R × (1 - tan(θ/2))
+     * @param taperAngle テーパー角度（度）
+     * @param pos 'start' または 'end' - テーパーのどちら端か
+     * @returns Z方向オフセット量
+     */
+    private calculateTaperOffset(taperAngle: number, pos: 'start' | 'end'): number {
+        // テーパーの終点のみ特殊計算が必要（始点は通常のオフセット）
+        if (pos === 'start') {
+            return 0
+        }
+        const angleRad = taperAngle * Math.PI / 180
+        const fz = this.noseR * (1 - Math.tan(angleRad / 2))
+        return fz
+    }
+
+    /**
      * 幾何学的交点法による補正計算
-     * 各ノード(接続点)でのオフセット量 = R / cos(θ/2) … 2本のオフセット線の交点
+     * 各ノード(接続点)でのオフセット量 = R × tan(θ/2) … 2本のオフセット線の交点
      * 端点ノードは法線方向へR（単純オフセット）
+     *
+     * 改良版: テーパーセグメントの終点は専用公式を使用
      */
     private calculateWithBisector(profile: Segment[]): CompensatedSegment[] {
         const nodes: {
             x: number,
             z: number,
             n: { nx: number, nz: number },
-            bisec?: { bx: number, bz: number, dist: number }  // 一般解用に保存
+            bisec?: { bx: number, bz: number, dist: number },  // 一般解用に保存
+            usedTaperFormula?: boolean  // テーパー公式を使用したノード（dz=0）
         }[] = []
 
         for (let i = 0; i <= profile.length; i++) {
             let n: { nx: number, nz: number }
             let bisec: { bx: number, bz: number, dist: number } | undefined
 
-            if (i === 0) {
-                n = this.getNormalAt(profile[0], 'start')
-            } else if (i === profile.length) {
-                n = this.getNormalAt(profile[profile.length - 1], 'end')
-            } else {
-                const n1 = this.getNormalAt(profile[i - 1], 'end')
-                const n2 = this.getNormalAt(profile[i], 'start')
-                bisec = this.calculateBisector(n1, n2)  // 保存用に変数化
-                n = { nx: bisec.bx * (bisec.dist / this.noseR), nz: bisec.bz * (bisec.dist / this.noseR) }
-            }
-
             const refX = (i < profile.length ? profile[i].startX : profile[profile.length - 1].endX) / 2
             const refZ = (i < profile.length ? profile[i].startZ : profile[profile.length - 1].endZ)
 
-            const px = refX + n.nx * this.noseR
-            const pz = refZ + n.nz * this.noseR
+            // テーパー終点の特殊処理
+            const prevSeg = i > 0 ? profile[i - 1] : null
+            const isPrevTaper = prevSeg && this.isTaper(prevSeg)
 
-            // bisec 情報を含めて保存
-            nodes.push({ x: px, z: pz, n, bisec })
+            if (isPrevTaper && i < profile.length) {
+                // テーパー終点：HP方式/Peter Smid公式を使用
+                // fz = R × (1 - tan(θ/2)), fx = R × (1 - tan(θ/2))
+                const taperAngle = prevSeg!.angle!
+                const factor = 1 - Math.tan(taperAngle * Math.PI / 180 / 2)
+
+                // P座標 = ref - offset（テーパー方向へのオフセット）
+                const px = refX - this.noseR * factor
+                const pz = refZ - this.noseR * factor
+
+                // 次セグメントとの接続用に法線を計算（Bisectorは使わない）
+                n = this.getNormalAt(profile[i], 'start')
+
+                // テーパー公式使用フラグをセット（これによりpToOでdz=0になる）
+                nodes.push({ x: px, z: pz, n, bisec: undefined, usedTaperFormula: true })
+            } else {
+                // 通常の Bisector Method
+                if (i === 0) {
+                    n = this.getNormalAt(profile[0], 'start')
+                } else if (i === profile.length) {
+                    n = this.getNormalAt(profile[profile.length - 1], 'end')
+                } else {
+                    const n1 = this.getNormalAt(profile[i - 1], 'end')
+                    const n2 = this.getNormalAt(profile[i], 'start')
+                    bisec = this.calculateBisector(n1, n2)
+                    n = { nx: bisec.bx * (bisec.dist / this.noseR), nz: bisec.bz * (bisec.dist / this.noseR) }
+                }
+
+                const px = refX + n.nx * this.noseR
+                const pz = refZ + n.nz * this.noseR
+
+                nodes.push({ x: px, z: pz, n, bisec })
+            }
         }
 
         const result: CompensatedSegment[] = []
@@ -215,12 +267,17 @@ export class CenterTrackCalculator {
             const endIsConvex = (seg.type === 'arc' && seg.isConvex !== false)
 
             // フラグで切り替え: USE_BZ_BASED_DZ = true なら bisec + isConvex を渡す
-            const startParam = (USE_BZ_BASED_DZ && sNode.bisec)
-                ? { bisec: sNode.bisec, isConvex: startIsConvex }
-                : startIsConvex
-            const endParam = (USE_BZ_BASED_DZ && eNode.bisec)
-                ? { bisec: eNode.bisec, isConvex: endIsConvex }
-                : endIsConvex
+            // テーパー公式使用ノードの場合は強制的にdz=0
+            const startParam = sNode.usedTaperFormula
+                ? true  // テーパー公式使用時はisConvex=trueでdz=0
+                : (USE_BZ_BASED_DZ && sNode.bisec)
+                    ? { bisec: sNode.bisec, isConvex: startIsConvex }
+                    : startIsConvex
+            const endParam = eNode.usedTaperFormula
+                ? true  // テーパー公式使用時はisConvex=trueでdz=0
+                : (USE_BZ_BASED_DZ && eNode.bisec)
+                    ? { bisec: eNode.bisec, isConvex: endIsConvex }
+                    : endIsConvex
 
             const startO = pToO(sNode.x * 2, sNode.z, this.noseR, this.toolType, startParam)
             const endO = pToO(eNode.x * 2, eNode.z, this.noseR, this.toolType, endParam)
@@ -254,14 +311,15 @@ export class CenterTrackCalculator {
     private calculateBisector(n1: { nx: number, nz: number }, n2: { nx: number, nz: number }): { dist: number, bx: number, bz: number } {
         const dot = Math.max(-1.0, Math.min(1.0, n1.nx * n2.nx + n1.nz * n2.nz))
         const cosHalf = Math.sqrt((1.0 + dot) / 2.0)
+        const sinHalf = Math.sqrt((1.0 - dot) / 2.0)
 
-        // 幾何学的交点法: dist = R / cos(θ/2)
-        // 2本の平行オフセット線の交点はコーナー点からcos(θ/2)分の距離にある
-        // Spike Guard: S字/U字ターン（法線が90°超で反転）では交点が発散するため
-        // 単純な垂直オフセット(R)を使用
+        // Peter Smid理論: dist = R × tan(θ/2) = R × sin(θ/2) / cos(θ/2)
+        // 2本の平行オフセット線の交点はコーナー点からR×tan(θ/2)の距離にある
+        // Spike Guard: 180度反転等での発散防止（cos→0でtan→∞を防ぐ）
+        const tanHalf = sinHalf / Math.max(0.01, cosHalf)
         const dist = (dot >= 0)
-            ? this.noseR / Math.max(0.01, cosHalf)  // 凸コーナー: 幾何学的交点
-            : this.noseR                              // S字/凹コーナー: 単純オフセット
+            ? this.noseR * tanHalf  // 凸コーナー: 幾何学的交点（修正版）
+            : this.noseR            // S字/凹コーナー: 単純オフセット
 
         let bx = n1.nx + n2.nx, bz = n1.nz + n2.nz
         const len = Math.sqrt(bx * bx + bz * bz)

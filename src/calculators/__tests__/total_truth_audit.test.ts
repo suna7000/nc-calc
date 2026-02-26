@@ -39,7 +39,7 @@ describe('Total Truth Audit: 真理の証明', () => {
         const result = calculateShape({ points: [p0, p1, p2] }, testSettings)
         const comp = result.segments[1].compensated!
 
-        // --- 教科書式による真理計算 ---
+        // --- 教科書式による真理計算（修正版: tan(θ/2)使用）---
         // 全セグメントが直線のため、教科書式を使用
         //
         // セグメント1（垂直線 X100 Z10→0）:
@@ -47,10 +47,11 @@ describe('Total Truth Audit: 真理の証明', () => {
         // fz = R × (1 - tan(0°/2)) = R × (1 - 0) = R = 0.8mm
         // 補正後終点: Z = 0 - 0.8 = -0.8mm
         //
-        // 幾何学的交点法: 垂直→45°テーパー接合点
-        // n1=(1,0), n2=(0.707,0.707), cosHalf=0.924, dist=R/cosHalf=0.866
-        // 接合ノードZ = 0.331, プログラムZ = 0.331 - 0.8 = -0.469
-        const expectedO_prime_z = -0.469
+        // 幾何学的交点法（修正版）: 垂直→45°テーパー接合点
+        // n1=(1,0), n2=(0.707,0.707), angle=45°, halfAngle=22.5°
+        // tan(22.5°)=0.414, dist=R×tan(22.5°)=0.331mm
+        // 接合ノードZ = 0.127, プログラムZ = 0.127 - 0.8 = -0.673
+        const expectedO_prime_z = -0.673
 
         console.log(`G-09 監査: 理論値 O'z=${expectedO_prime_z}, 実装値=${comp.startZ}`)
         expect(comp.startZ).toBeCloseTo(expectedO_prime_z, 2)

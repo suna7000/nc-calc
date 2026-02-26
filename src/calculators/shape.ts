@@ -428,6 +428,7 @@ export function calculateShape(
                     startZ: res.startZ,
                     endX: res.endX,
                     endZ: res.endZ,
+                    angle: res.angle,  // テーパー角度を追加
                     centerX: res.centerX,
                     centerZ: res.centerZ,
                     radius: res.radius,
