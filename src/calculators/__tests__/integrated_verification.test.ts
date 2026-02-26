@@ -53,18 +53,18 @@ describe('統合検証: shape + noseRCompensation', () => {
                 console.log(`  中心: X${arc.compensated.centerX} Z${arc.compensated.centerZ}`)
                 console.log(`  半径: ${arc.compensated.radius}mm`)
 
-                // Bisector距離修正後の期待値
+                // 手書き期待値との比較
                 const expectedStartZ = -114.793 // calculateCornerで計算される値
-                const compensatedStartZ = -115.193 // 修正後: R×tan(θ/2)による計算結果
+                const handwrittenStartZ = -114.827 // 手書きメモの期待値
 
                 console.log('\n【比較】')
                 console.log(`  プロファイルZ: ${arc.startZ}`)
                 console.log(`  補正後Z: ${arc.compensated.startZ}`)
-                console.log(`  修正後期待値: ${compensatedStartZ}`)
-                console.log(`  誤差: ${(arc.compensated.startZ - compensatedStartZ).toFixed(3)}mm`)
+                console.log(`  手書き期待値: ${handwrittenStartZ}`)
+                console.log(`  誤差: ${(arc.compensated.startZ - handwrittenStartZ).toFixed(3)}mm`)
 
-                // 修正後の期待値と比較（±0.05mm以内）
-                const error = Math.abs(arc.compensated.startZ - compensatedStartZ)
+                // ±0.05mm以内なら許容
+                const error = Math.abs(arc.compensated.startZ - handwrittenStartZ)
                 expect(error).toBeLessThan(0.05)
             }
         }
@@ -110,9 +110,9 @@ describe('統合検証: shape + noseRCompensation', () => {
             console.log(`  補正後始点Z: ${arcConditional.compensated.startZ}`)
             console.log(`  補正後終点Z: ${arcConditional.compensated.endZ}`)
 
-            const expectedStartZ = -115.193  // 修正後: R×tan(θ/2)による計算結果
-            const error = Math.abs(arcConditional.compensated.startZ - expectedStartZ)
-            console.log(`  期待値との誤差: ${error.toFixed(3)}mm`)
+            const handwrittenStartZ = -114.827
+            const error = Math.abs(arcConditional.compensated.startZ - handwrittenStartZ)
+            console.log(`  手書き値との誤差: ${error.toFixed(3)}mm`)
 
             // 検証: ±0.05mm以内
             expect(error).toBeLessThan(0.05)
