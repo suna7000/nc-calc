@@ -245,17 +245,19 @@ export class CenterTrackCalculator {
                 const prevSeg = profile[i - 1]
                 const nextSeg = profile[i]
 
-                // ⭐ テーパー線の場合: P座標は幾何座標そのまま（垂直オフセットなし）
-                // 記事の fz = R×(1±tan(θ/2)) が合計補正量なので、P座標にオフセットを含めない
+                // ⭐ テーパー線の接続点処理
+                // - 両方がテーパー：n={0,0}（テーパー線の途中の点）
+                // - 片方だけテーパー：通常のBisector（テーパーと非テーパーの接続点）
                 const prevIsTaper = prevSeg.type === 'line' && prevSeg.angle !== undefined && prevSeg.angle !== 0 && prevSeg.angle !== 90
                 const nextIsTaper = nextSeg.type === 'line' && nextSeg.angle !== undefined && nextSeg.angle !== 0 && nextSeg.angle !== 90
 
-                if (prevIsTaper || nextIsTaper) {
-                    // テーパー線：垂直オフセットなし（n = 0ベクトル相当）
+                if (prevIsTaper && nextIsTaper) {
+                    // 両方がテーパー線：P座標は幾何座標そのまま（垂直オフセットなし）
                     // fz補正だけを dz で適用する
                     n = { nx: 0, nz: 0 }
                 } else {
-                    // 通常のBisector計算
+                    // 通常のBisector計算（片方だけテーパー、または両方とも非テーパー）
+                    // テーパーと非テーパーの接続点では、両方の法線を考慮する必要がある
                     const n1 = this.getNormalAt(profile[i - 1], 'end')
                     const n2 = this.getNormalAt(profile[i], 'start')
                     bisec = this.calculateBisector(n1, n2)
