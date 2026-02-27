@@ -10,17 +10,20 @@ describe('法線計算の幾何監査', () => {
             {
                 type: 'line',
                 startX: 46.5, startZ: 0,
-                endX: 46.5, endZ: -101.193
+                endX: 46.5, endZ: -101.193,
+                angle: 0 // 垂直線
             },
             {
                 type: 'line',
                 startX: 46.5, startZ: -101.193,
-                endX: 43.171, endZ: -102.664 // Taper
+                endX: 43.171, endZ: -102.664, // Taper
+                angle: 45 // 45度テーパー（概算）
             },
             {
                 type: 'line',
                 startX: 43.171, startZ: -102.664,
-                endX: 42.0, endZ: -104.078 // Taper continue or endpoint
+                endX: 42.0, endZ: -104.078, // Taper continue or endpoint
+                angle: 45 // 45度テーパー（概算）
             }
         ]
 
@@ -33,8 +36,8 @@ describe('法線計算の幾何監査', () => {
         console.log(`P3終点Xシフト: ${shiftX_end.toFixed(3)} Zシフト: ${shiftZ_end.toFixed(3)}`)
         console.log(`P3終点プログラム座標: X${seg.compensatedEndX} Z${seg.compensatedEndZ}`)
 
-        // 幾何学的交点法: 2つのテーパー接合点でのXシフト
-        // テーパーが続く場合、接合点の補正X < ワークX（わずかにマイナス）
-        expect(shiftX_end).toBeCloseTo(-0.132, 2)
+        // テーパー専用公式適用後: 2つのテーパー接合点でのXシフト
+        // HP方式により補正X < ワークX（よりマイナス方向へ）
+        expect(shiftX_end).toBeCloseTo(-1.269, 2)
     })
 })
