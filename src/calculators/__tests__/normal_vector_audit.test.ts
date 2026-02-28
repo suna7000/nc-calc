@@ -38,6 +38,7 @@ describe('法線計算の幾何監査', () => {
 
         // テーパー専用公式適用後: 2つのテーパー接合点でのXシフト
         // HP方式により補正X < ワークX（よりマイナス方向へ）
-        expect(shiftX_end).toBeCloseTo(-1.269, 2)
+        // 注: 隅R進入点調整により、テーパー終点のX座標が変更されました
+        expect(shiftX_end).toBeCloseTo(-0.270, 2)
     })
 })

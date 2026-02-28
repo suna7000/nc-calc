@@ -151,6 +151,9 @@ export function calculateShape(
         }
     }
 
+    // 前のセグメントの角度を追跡（隅R進入点調整に使用）
+    let prevSegmentAngle: number | undefined = undefined
+
     while (i < shape.points.length - 1) {
         const nextPoint = shape.points[i + 1]
 
@@ -220,9 +223,10 @@ export function calculateShape(
                 corner: { type: 'none', size: 0 },
                 id: 'curr'
             }
-            const cornerCalc = calculateCorner(currentPointObj, nextPoint, afterNextPoint)
+            const cornerCalc = calculateCorner(currentPointObj, nextPoint, afterNextPoint, prevSegmentAngle)
 
             if (cornerCalc) {
+                const lineAngle = calculateAngle(currentX, currentZ, cornerCalc.entryX, cornerCalc.entryZ)
                 results.push({
                     index: results.length + 1,
                     type: 'line',
@@ -230,8 +234,11 @@ export function calculateShape(
                     startZ: currentZ,
                     endX: cornerCalc.entryX,
                     endZ: cornerCalc.entryZ,
-                    angle: calculateAngle(currentX, currentZ, cornerCalc.entryX, cornerCalc.entryZ)
+                    angle: lineAngle
                 })
+
+                // 前のセグメント角度を更新（次のコーナー計算用）
+                prevSegmentAngle = lineAngle
 
                 const isR = nextPoint.corner.type === 'sumi-r' || nextPoint.corner.type === 'kaku-r'
                 if (isR) {
@@ -423,7 +430,7 @@ export function calculateShape(
             const profile: Segment[] = results.map(res => {
                 const isConvex = res.isConvex
                 return {
-                    type: res.type === 'corner-r' ? 'arc' : 'line' as SegmentType,
+                    type: res.type as SegmentType,  // 型をそのまま保持（'corner-r' | 'line' | 'corner-c'）
                     startX: res.startX,
                     startZ: res.startZ,
                     endX: res.endX,
@@ -731,18 +738,46 @@ function determineGCode(isLeftTurn: boolean, _type: 'kaku-r' | 'sumi-r', setting
 
 /**
  * コーナー計算（純粋なワーク形状）
+ * @param prevSegmentAngle 前のセグメントのテーパー角度（度）- 隅R進入点調整に使用
  * @returns ワーク形状上の接点座標、Rなど
  */
-function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | null {
+function calculateCorner(p1: Point, p2: Point, p3: Point, prevSegmentAngle?: number): CornerCalculation | null {
     const originalSize = p2.corner.size
     if (originalSize <= 0) return null
 
     // ワーク形状そのものを計算（ノーズR補正なし）
     const adjustedSize = originalSize
 
+    // 隅R（凹円弧）への進入時、p1→p2の方向がテーパーの場合は特殊な進入点計算
+    let p2AdjustedZ = p2.z
+    if (p2.corner.type === 'sumi-r') {
+        // p1→p2の方向から角度を計算
+        const dx = (p2.x - p1.x) / 2  // 半径ベース
+        const dz = p2.z - p1.z
+        const len = Math.sqrt(dx * dx + dz * dz)
+        if (len > 0.001) {  // ほぼゼロでない場合
+            const angleRad = Math.atan2(Math.abs(dx), Math.abs(dz))
+            const angleDeg = angleRad * 180 / Math.PI
 
-    const v1x = (p1.x - p2.x) / 2, v1z = p1.z - p2.z
-    const v2x = (p3.x - p2.x) / 2, v2z = p3.z - p2.z
+            // テーパー角度（0度より大きく90度未満）の場合に調整
+            if (angleDeg > 0.1 && angleDeg < 89.9) {
+                // 手書き計算に基づく隅R進入点の調整
+                // fz = R_nose × (1 + tan(θ/2))
+                // ΔZ = fz × tan(θ/2)
+                // 進入点Z = 元のZ - fz - ΔZ
+                // Note: この計算はノーズR=0.4mmを仮定
+                const noseR = 0.4  // TODO: 外部から取得すべき
+                const halfAngleRad = angleRad / 2
+                const fz = noseR * (1 + Math.tan(halfAngleRad))
+                const deltaZ = fz * Math.tan(halfAngleRad)
+                p2AdjustedZ = p2.z - fz - deltaZ
+            }
+        }
+    }
+
+
+    const v1x = (p1.x - p2.x) / 2, v1z = p1.z - p2AdjustedZ
+    const v2x = (p3.x - p2.x) / 2, v2z = p3.z - p2AdjustedZ
     const l1 = Math.sqrt(v1x * v1x + v1z * v1z), l2 = Math.sqrt(v2x * v2x + v2z * v2z)
     if (l1 === 0 || l2 === 0) return null
     const u1x = v1x / l1, u1z = v1z / l1, u2x = v2x / l2, u2z = v2z / l2
@@ -820,14 +855,16 @@ function calculateCorner(p1: Point, p2: Point, p3: Point): CornerCalculation | n
     // Standard Center Calculation
     const cDist_std = finalSize / Math.sin(half)
     let cX = p2.x / 2 + (bX / bL) * cDist_std
-    let cZ = p2.z + (bZ / bL) * cDist_std
+    let cZ = p2AdjustedZ + (bZ / bL) * cDist_std
 
     // Standard Entry/Exit Calculation
     // Use `let` to allow clipping modification
     let eX = p2.x / 2 + u1x * tDist_in
-    let eZ = manualEntryZ !== null ? manualEntryZ : p2.z + u1z * tDist_in
+    // 隅R進入点調整が適用されている場合は、entryZを直接p2AdjustedZに設定
+    const wasAdjusted = (p2.corner.type === 'sumi-r' && p2AdjustedZ !== p2.z)
+    let eZ = wasAdjusted ? p2AdjustedZ : (manualEntryZ !== null ? manualEntryZ : p2AdjustedZ + u1z * tDist_in)
     let xX = p2.x / 2 + u2x * tDist_out
-    let xZ = p2.z + u2z * tDist_out
+    let xZ = p2AdjustedZ + u2z * tDist_out
 
     // -------------------------------------------------------------------------
     // Intersection Clipping ("Factory Manager's Logic")

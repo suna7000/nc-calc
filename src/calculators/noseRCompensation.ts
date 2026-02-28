@@ -4,7 +4,7 @@
  * 2026/02/26 数学的誤り修正: dist = R × tan(θ/2) （教科書: Peter Smid / ISO 補正理論）
  */
 
-export type SegmentType = 'line' | 'arc'
+export type SegmentType = 'line' | 'corner-r' | 'corner-c'
 
 export interface Segment {
     type: SegmentType
@@ -201,18 +201,47 @@ export class CenterTrackCalculator {
 
             if (isPrevTaper && i < profile.length) {
                 // テーパー終点：HP方式/Peter Smid公式を使用
-                // fz = R × (1 - tan(θ/2)), fx = R × (1 - tan(θ/2))
                 const taperAngle = prevSeg!.angle!
-                const factor = 1 - Math.tan(taperAngle * Math.PI / 180 / 2)
+                const taperAngleRad = taperAngle * Math.PI / 180
+                const halfAngleRad = taperAngleRad / 2
 
-                // P座標 = ref - offset（テーパー方向へのオフセット）
-                const px = refX - this.noseR * factor
-                const pz = refZ - this.noseR * factor
+                // 次のセグメントが凹円弧（隅R）かチェック
+                const nextSeg = profile[i]
+                const isNextConcave = nextSeg.type === 'corner-r' && nextSeg.isConvex === false
 
-                // 次セグメントとの接続用に法線を計算（Bisectorは使わない）
+                let pz: number
+                if (isNextConcave) {
+                    // 隅R（凹円弧）への進入：特殊な補正公式
+                    // 手書き計算：fz = R × (1 + tan(θ/2))
+                    //             fz_effective = fz × cos(θ)
+                    //             補正後Z = 元座標Z + fz_effective
+                    const fz = this.noseR * (1 + Math.tan(halfAngleRad))
+                    const fz_effective = fz * Math.cos(taperAngleRad)
+                    pz = refZ + fz_effective
+                } else {
+                    // 通常のテーパー終点：fz = R × (1 - tan(θ/2))
+                    const fz = this.noseR * (1 - Math.tan(halfAngleRad))
+                    pz = refZ - fz
+                }
+
+                // P座標のX成分: テーパーの方向ベクトルを考慮
+                const dx = (prevSeg.endX - prevSeg.startX) / 2
+                const dz = prevSeg.endZ - prevSeg.startZ
+                const len = Math.sqrt(dx * dx + dz * dz)
+                const ux = dx / len
+                const uz = dz / len
+
+                // 法線ベクトル（テーパーに垂直、外側方向）
+                const nx = -uz
+                const nz = ux
+
+                // P座標 = ref + 法線方向 × noseR
+                const px = refX + nx * this.noseR
+
+                // 次セグメントとの接続用に法線を計算
                 n = this.getNormalAt(profile[i], 'start')
 
-                // テーパー公式使用フラグをセット（これによりpToOでdz=0になる）
+                // テーパー公式使用フラグをセット
                 nodes.push({ x: px, z: pz, n, bisec: undefined, usedTaperFormula: true })
             } else {
                 // 通常の Bisector Method
@@ -246,8 +275,8 @@ export class CenterTrackCalculator {
 
             // Only convex arcs should have isConvex=true (no Z offset)
             // Everything else (concave arcs and lines) should have isConvex=false (apply Z offset)
-            const startIsConvex = (seg.type === 'arc' && seg.isConvex !== false)
-            const endIsConvex = (seg.type === 'arc' && seg.isConvex !== false)
+            const startIsConvex = (seg.type === 'corner-r' && seg.isConvex !== false)
+            const endIsConvex = (seg.type === 'corner-r' && seg.isConvex !== false)
 
             // フラグで切り替え: USE_BZ_BASED_DZ = true なら bisec + isConvex を渡す
             // テーパー公式使用ノードの場合は強制的にdz=0
@@ -269,7 +298,7 @@ export class CenterTrackCalculator {
             let cCX = seg.centerX
             let cCZ = seg.centerZ
 
-            if (seg.type === 'arc' && seg.radius !== undefined && seg.centerX !== undefined && seg.centerZ !== undefined) {
+            if (seg.type === 'corner-r' && seg.radius !== undefined && seg.centerX !== undefined && seg.centerZ !== undefined) {
                 const isConvex = seg.isConvex !== false
                 cR = isConvex ? (seg.radius + this.noseR) : Math.abs(seg.radius - this.noseR)
                 const centerProg = pToO(seg.centerX, seg.centerZ, this.noseR, this.toolType, isConvex)
@@ -284,8 +313,8 @@ export class CenterTrackCalculator {
                 compensatedRadius: cR !== undefined ? round3(cR) : undefined,
                 compensatedCenterX: cCX !== undefined ? round3(cCX) : undefined,
                 compensatedCenterZ: cCZ !== undefined ? round3(cCZ) : undefined,
-                compensatedI: (seg.type === 'arc' && cCX !== undefined) ? round3((cCX - startO.ox) / 2) : undefined,
-                compensatedK: (seg.type === 'arc' && cCZ !== undefined) ? round3(cCZ - startO.oz) : undefined
+                compensatedI: (seg.type === 'corner-r' && cCX !== undefined) ? round3((cCX - startO.ox) / 2) : undefined,
+                compensatedK: (seg.type === 'corner-r' && cCZ !== undefined) ? round3(cCZ - startO.oz) : undefined
             })
         }
         return result
@@ -312,7 +341,7 @@ export class CenterTrackCalculator {
 
     private getNormalAt(seg: Segment, pos: 'start' | 'end'): { nx: number; nz: number } {
         let nx = 0, nz = 0
-        if (seg.type === 'arc' && seg.centerX !== undefined && seg.centerZ !== undefined) {
+        if (seg.type === 'corner-r' && seg.centerX !== undefined && seg.centerZ !== undefined) {
             const px = (pos === 'start' ? seg.startX : seg.endX) / 2
             const pz = (pos === 'start' ? seg.startZ : seg.endZ)
             nx = (px - seg.centerX / 2); nz = (pz - seg.centerZ)
