@@ -60,6 +60,69 @@ describe('fz公式の数学的正しさ', () => {
 })
 
 // ============================================================
+// 1b. fx公式の数学的検証
+// ============================================================
+describe('fx公式の数学的正しさ', () => {
+    it('fx = 2R(1 - tan(φ/2)) の代表値が正しい（φ = 90° - θ）', () => {
+        // fx = 2R(1 - tan(φ/2)), φ = 90° - θ
+        // θ=15°: φ=75°, φ/2=37.5°, tan(37.5°)=0.7673, fx=0.8×0.2327=0.186
+        // θ=30°: φ=60°, φ/2=30°, tan(30°)=0.5774, fx=0.8×0.4226=0.338
+        // θ=45°: φ=45°, φ/2=22.5°, tan(22.5°)=0.4142, fx=0.8×0.5858=0.469
+        // θ=60°: φ=30°, φ/2=15°, tan(15°)=0.2679, fx=0.8×0.7321=0.586
+        const cases = [
+            { angle: 0,  expected: 0.000 },  // 端面: fx = 0（X方向補正なし）
+            { angle: 15, expected: 0.186 },  // φ=75°
+            { angle: 30, expected: 0.338 },  // φ=60°
+            { angle: 45, expected: 0.469 },  // φ=45°
+            { angle: 60, expected: 0.586 },  // φ=30°
+            { angle: 90, expected: 0.800 },  // 外径面: fx = 2R
+        ]
+        for (const { angle, expected } of cases) {
+            const phi = (90 - angle) * PI / 180
+            const fx = 2 * R * (1 - Math.tan(phi / 2))
+            expect(fx).toBeCloseTo(expected, 3)
+        }
+    })
+
+    it('θ=0（端面）でfx=0、θ=90（外径）でfx=2R', () => {
+        // 端面: φ = 90°, fx = 2R(1 - tan(45°)) = 2R(1-1) = 0
+        const fx_endface = 2 * R * (1 - Math.tan(45 * PI / 180))
+        expect(fx_endface).toBeCloseTo(0, 10)
+
+        // 外径: φ = 0°, fx = 2R(1 - tan(0)) = 2R
+        const fx_outer = 2 * R * (1 - Math.tan(0))
+        expect(fx_outer).toBeCloseTo(2 * R, 10)
+    })
+
+    it('θ=45°でfx(半径値) = fz（対称性の直接検証）', () => {
+        const theta = 45 * PI / 180
+        const phi = (90 - 45) * PI / 180  // = 45°
+
+        const fz = R * (1 - Math.tan(theta / 2))
+        const fx_radius = R * (1 - Math.tan(phi / 2))
+
+        // θ=45°では φ=45° なので、半角も同じ → fz = fx(半径値)
+        expect(fx_radius).toBeCloseTo(fz, 10)
+    })
+
+    it('fz + fx の組み合わせ: テーパー角による補正量の配分', () => {
+        // θが小さい → fzが大きく、fxが小さい（ほぼ端面）
+        const theta15 = 15 * PI / 180
+        const phi15 = (90 - 15) * PI / 180
+        const fz_15 = R * (1 - Math.tan(theta15 / 2))
+        const fx_15_radius = R * (1 - Math.tan(phi15 / 2))
+        expect(fz_15).toBeGreaterThan(fx_15_radius)
+
+        // θが大きい → fzが小さく、fxが大きい（ほぼ外径面）
+        const theta75 = 75 * PI / 180
+        const phi75 = (90 - 75) * PI / 180
+        const fz_75 = R * (1 - Math.tan(theta75 / 2))
+        const fx_75_radius = R * (1 - Math.tan(phi75 / 2))
+        expect(fz_75).toBeLessThan(fx_75_radius)
+    })
+})
+
+// ============================================================
 // 2. オフセット曲線: 直線の法線オフセット
 // ============================================================
 describe('直線セグメントの法線オフセット', () => {
