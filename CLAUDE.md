@@ -195,11 +195,12 @@ Extensive domain knowledge in `docs/`:
 
 Key concepts for taper line compensation:
 - **Taper detection**: `isTaper()` method — line segments where `angle != 0` and `angle != 90`
-- **Taper segments use n={0,0}**: No perpendicular offset; P coordinate = geometric coordinate
-- **fz formula** (Peter Smid): `fz = R(1 - tan(θ/2))` standard, `fz = R(1 + tan(θ/2))` for diameter-increasing direction
+- **Taper endpoint (isPrevTaper)**: fz formula for Z, **next segment normal** for X
+- **Taper startpoint (isNextTaper)**: fz formula for Z, **prev segment normal** for X
+- **fz formula** (Peter Smid): `fz = R(1 - tan(θ/2))` for diameter-decreasing, `fz = R(1 + tan(θ/2))` for diameter-increasing
 - **Direction determined by diameter change** (endX vs startX), NOT by Z coordinate
-- **Bisector distance**: `R × tan(θ/2)` — NOT `R / cos(θ/2)` (the latter overestimates by 41% at 90°)
-- See: `docs/nose_r_fix_2026-02-24/` and `docs/quick_reference.md`
+- **Bisector distance**: `R / cos(α/2)` — offset line intersection along bisector direction
+- See: `docs/unified_compensation_theory.md` and `docs/quick_reference.md`
 
 ### Nose R Compensation: Z-Offset (Hybrid bz-based Solution)
 

@@ -48,11 +48,13 @@ const settingsR04: MachineSettings = {
 // 1. IMG_1423 (例5): 6点形状 R0.8 — C0.2なし
 // ============================================================
 describe('IMG_1423 (例5): 6点形状 R0.8（C0.2なし）', () => {
-    // 図面座標: X60 Z0 → X60 Z-45.653 → X59.6 Z-46 → X59.6 Z-50(R2) → X80 Z-50 → X80 Z-60
+    // 図面座標: X62 Z0 → X62 Z-43.922 → X59.6 Z-46 → X59.6 Z-50(R2) → X80 Z-50 → X80 Z-60
+    // 注: X62始まり（2mm逃し）— 手書きIMG_1423に合わせた形状
+    // テーパー始点Z計算: ΔX_r=1.2, ΔZ=1.2/tan(30°)=2.078, Z=-46+2.078=-43.922
     const shape = {
         points: [
-            createPoint(60, 0, noCorner()),
-            createPoint(60, -45.653, noCorner()),
+            createPoint(62, 0, noCorner()),
+            createPoint(62, -43.922, noCorner()),
             createPoint(59.6, -46, noCorner()),
             createPoint(59.6, -50, { type: 'sumi-r', size: 2 }),
             createPoint(80, -50, noCorner()),
@@ -60,8 +62,21 @@ describe('IMG_1423 (例5): 6点形状 R0.8（C0.2なし）', () => {
         ]
     }
 
-    it('テーパー終点Z: 手書き Z-46.586', () => {
+    it('テーパー始点: 手書き X62 Z-44.508（完全一致）', () => {
+        // テーパー始点のfz公式: fz = R(1-tan(15°)) = 0.586
+        // X: 前セグメント（垂直線）法線使用 → O_x = 62
+        // Z: -43.922 - 0.586 = -44.508
         const result = calculateShape(shape, settingsR08)
+        expect(result.segments[0].compensated?.endX).toBeCloseTo(62, 3)
+        expect(result.segments[0].compensated?.endZ).toBeCloseTo(-44.508, 3)
+    })
+
+    it('テーパー終点: 手書き X59.6 Z-46.586（完全一致）', () => {
+        // テーパー終点のfz公式: fz = R(1-tan(15°)) = 0.586
+        // X: 次セグメント（垂直線）法線使用 → O_x = 59.6
+        // Z: -46 - 0.586 = -46.586
+        const result = calculateShape(shape, settingsR08)
+        expect(result.segments[1].compensated?.endX).toBeCloseTo(59.6, 3)
         expect(result.segments[1].compensated?.endZ).toBeCloseTo(-46.586, 3)
     })
 
@@ -80,37 +95,10 @@ describe('IMG_1423 (例5): 6点形状 R0.8（C0.2なし）', () => {
         expect(result.segments[3].compensated?.endX).toBeCloseTo(62, 3)
     })
 
-    it('テーパー始点: 手書き X62 Z-44.508 vs bisector法', () => {
-        // IMG_1423: テーパー始点の補正座標 = X62 Z-44.508
-        // 手書きでは (X62, Z-44.508)→(X59.6, Z-46.586) が正確に30°テーパーを保つ
-        // bisector法は異なる始点を出す（X58.814 Z-46.508）
-        const result = calculateShape(shape, settingsR08)
-        const seg1End = result.segments[0].compensated!
-
-        console.log('\n=== テーパー始点の比較 ===')
-        console.log(`手書き:     X62      Z-44.508`)
-        console.log(`bisector法: X${seg1End.endX} Z${seg1End.endZ}`)
-        console.log(`差: X=${(62 - seg1End.endX).toFixed(3)}, Z=${(-44.508 - seg1End.endZ).toFixed(3)}`)
-
-        // 手書き値とbisector法の始点は異なる（計算方法の違い）
-        // 手書きは補正後ラインの交点法、本アプリはbisector法を使用
-        // 最終的なテーパー終点Zは一致する（-46.586）
-        expect(result.segments[1].compensated?.endZ).toBeCloseTo(-46.586, 3)
-    })
-
-    it('水平線終点X: 手書き X78.622 vs bisector法', () => {
-        // IMG_1423/1496: 水平線の補正後終点X = X78.622
-        // bisector法（C0.2なし）: X79.531
+    it('水平線終点X: C0.2なし形状（C0.2付きは次ブロック参照）', () => {
         const result = calculateShape(shape, settingsR08)
         const horizSeg = result.segments.find(s => s.type === 'line' && s.angle === 90)
-
-        console.log('\n=== 水平線終点Xの比較（C0.2なし）===')
-        console.log(`手書き:     X78.622`)
-        console.log(`bisector法: X${horizSeg?.compensated?.endX}`)
-        console.log(`差: ${(78.622 - (horizSeg?.compensated?.endX ?? 0)).toFixed(3)}`)
-
         // 手書き図にはC0.2面取りが含まれており、C0.2なし形状での比較は不適切
-        // C0.2付き形状で改めて比較する（次のdescribeブロック）
         expect(horizSeg?.compensated?.endX).toBeDefined()
     })
 })
@@ -119,11 +107,11 @@ describe('IMG_1423 (例5): 6点形状 R0.8（C0.2なし）', () => {
 // 2. IMG_1423: C0.2面取り付き形状
 // ============================================================
 describe('IMG_1423: C0.2面取り付き形状', () => {
-    // 手書き図にはC0.2面取りが描かれている
+    // 手書き図にはC0.2面取りが描かれている（X62始まり、2mm逃し）
     const shapeWithC02 = {
         points: [
-            createPoint(60, 0, noCorner()),
-            createPoint(60, -45.653, noCorner()),
+            createPoint(62, 0, noCorner()),
+            createPoint(62, -43.922, noCorner()),
             createPoint(59.6, -46, noCorner()),
             createPoint(59.6, -50, { type: 'sumi-r', size: 2 }),
             createPoint(80, -50, { type: 'kaku-c', size: 0.2 }),
@@ -133,7 +121,10 @@ describe('IMG_1423: C0.2面取り付き形状', () => {
 
     it('C0.2付きでもテーパー・隅R値は変わらない', () => {
         const result = calculateShape(shapeWithC02, settingsR08)
-        // テーパー終点Z
+        // テーパー始点
+        expect(result.segments[0].compensated?.endX).toBeCloseTo(62, 3)
+        expect(result.segments[0].compensated?.endZ).toBeCloseTo(-44.508, 3)
+        // テーパー終点
         expect(result.segments[1].compensated?.endZ).toBeCloseTo(-46.586, 3)
         // 隅R2入口Z
         expect(result.segments[2].compensated?.endZ).toBeCloseTo(-48.8, 3)
@@ -143,7 +134,7 @@ describe('IMG_1423: C0.2面取り付き形状', () => {
         expect(result.segments[3].compensated?.endX).toBeCloseTo(62, 3)
     })
 
-    it('水平線終点X: 手書き X78.622 vs bisector法（C0.2付き）', () => {
+    it('水平線終点X: 手書き X78.622 vs 計算値 X78.663（差0.041mm）', () => {
         const result = calculateShape(shapeWithC02, settingsR08)
         const horizSeg = result.segments.find(s => s.type === 'line' && s.angle === 90)
 
@@ -152,9 +143,8 @@ describe('IMG_1423: C0.2面取り付き形状', () => {
         console.log(`bisector法: X${horizSeg?.compensated?.endX}`)
         console.log(`差: ${(78.622 - (horizSeg?.compensated?.endX ?? 0)).toFixed(3)}`)
 
-        // 手書きとbisector法は水平線終点で差が出る
-        // 手書き: X78.622, bisector: X78.254（差 0.368mm）
-        expect(horizSeg?.compensated?.endX).toBeDefined()
+        // R/cos修正後: X78.663（手書きX78.622との差 0.041mm、修正前は0.368mm）
+        expect(horizSeg?.compensated?.endX).toBeCloseTo(78.663, 3)
     })
 
     it('C0.2面取り後: 手書き X81 Z-51.189 vs bisector法', () => {
@@ -294,12 +284,13 @@ describe('IMG_1286: M86753 6点形状 R0.4', () => {
     })
 
     // --- 垂直線オフセット ---
-    it('垂直線X63区間: 補正後X = 62.2', () => {
+    it('垂直線X63区間: 補正後X = 63（R/cos修正後）', () => {
+        // R/cos修正後: 垂直線の補正Xは形状Xと一致（隅R出口の法線が垂直線と平行なため）
         const result = calculateShape(shape, settingsR04)
         const vertLine = result.segments.find(s =>
             s.type === 'line' && s.angle === 0 && s.startX === 63 && s.endX === 63
         )
-        expect(vertLine?.compensated?.startX).toBeCloseTo(62.2, 3)
+        expect(vertLine?.compensated?.startX).toBeCloseTo(63, 3)
     })
 
     // --- IMG_1286上の追加座標値 ---

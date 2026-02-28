@@ -47,8 +47,8 @@ describe('Nusumi Geometry Verification (11deg Taper + 0.4mm Undercut + R10)', ()
 
         // 1. 11度テーパーの終点 - HP方式: fz = R×(1-tan(θ/2))
         // fz = 0.4×(1-tan(5.5°)) = 0.4×0.904 = 0.362mm
-        // 注: 隅R進入点調整により、テーパー終点のX座標が変更されました
-        expect(result[0].compensatedEndX).toBeCloseTo(94.985, 3)
+        // テーパー終点X: 次セグメント（水平線）法線nx=0を使用 → O_x = 95 - 2R = 94.2
+        expect(result[0].compensatedEndX).toBeCloseTo(94.2, 3)
         expect(result[0].compensatedEndZ).toBeCloseTo(-13.222, 3)
 
         // 2. ぬすみ落ちの終点 - 水平線とR10の接続

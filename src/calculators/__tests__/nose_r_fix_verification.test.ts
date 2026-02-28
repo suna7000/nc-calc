@@ -89,10 +89,10 @@ describe('ノーズR補正修正の検証', () => {
         console.log(`  入力: X100 Z-10`)
         console.log(`  修正後: Z${compZ.toFixed(3)}`)
 
-        // 幾何学的交点法（修正版）: 垂直→水平 接合点のZ補正
-        // dist = R × tan(45°) = 0.8 × 1.0 = 0.8, pz = 0.234, oz = 0.234 - 0.8 = -0.566
-        // Actually this is vertical line end connecting to horizontal, so -10.234
-        expect(compZ).toBeCloseTo(-10.234, 1)
+        // 幾何学的交点法（R/cos修正版）: 垂直→水平 接合点のZ補正
+        // dist = R/cos(45°) = R√2, bisector方向(1,1)/√2, pz = -10 + R = -9.2
+        // oz = -9.2 - dz(=R) = -10.0 → 形状Zと一致（90°コーナーの正しい挙動）
+        expect(compZ).toBeCloseTo(-10.0, 1)
     })
 
     it('60度コーナーでのtan(30°)検証', () => {
@@ -108,8 +108,8 @@ describe('ノーズR補正修正の検証', () => {
 
         const result = calculateShape(shape, settings)
 
-        // 幾何学的交点法: 垂直→水平90°コーナー（ステップアウト）
-        // 実際には垂直→水平なので90°コーナー、Z補正は-10.0
+        // 実際には垂直→水平の接合なので90°コーナー
+        // R/cos(45°)修正後: oz = -10.0（形状Zと一致）
 
         const seg1 = result.segments[1]
         const compZ = seg1.compensated?.startZ ?? seg1.startZ
@@ -118,7 +118,7 @@ describe('ノーズR補正修正の検証', () => {
         console.log(`  入力: X100 Z-10`)
         console.log(`  修正後: Z${compZ.toFixed(3)}`)
 
-        // 垂直→水平接合: Z補正（修正版）
-        expect(compZ).toBeCloseTo(-10.234, 1)
+        // 垂直→水平接合: R/cos修正後は形状Zと一致
+        expect(compZ).toBeCloseTo(-10.0, 1)
     })
 })

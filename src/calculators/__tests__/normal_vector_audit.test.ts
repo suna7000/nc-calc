@@ -36,9 +36,8 @@ describe('法線計算の幾何監査', () => {
         console.log(`P3終点Xシフト: ${shiftX_end.toFixed(3)} Zシフト: ${shiftZ_end.toFixed(3)}`)
         console.log(`P3終点プログラム座標: X${seg.compensatedEndX} Z${seg.compensatedEndZ}`)
 
-        // テーパー専用公式適用後: 2つのテーパー接合点でのXシフト
-        // HP方式により補正X < ワークX（よりマイナス方向へ）
-        // 注: 隅R進入点調整により、テーパー終点のX座標が変更されました
-        expect(shiftX_end).toBeCloseTo(-0.270, 2)
+        // テーパー終点X: 次セグメント（同角度テーパー）法線を使用
+        // 同角度テーパー間の接続ではXシフトが最小になる（滑らかな遷移）
+        expect(shiftX_end).toBeCloseTo(-0.061, 2)
     })
 })
