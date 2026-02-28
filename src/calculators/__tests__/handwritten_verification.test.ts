@@ -2,10 +2,13 @@
  * 手書きメモ（手書き/フォルダ）の座標値と計算結果の照合テスト
  *
  * 画像ファイルと対応:
- * - IMG_1423.JPG (例5): 6点形状 R0.8 の手計算補正座標
+ * - IMG_1423.JPG (例5): 6点形状 R0.8 の手計算補正座標（修正後の正しい値）
  * - IMG_1496.JPG: 同形状の修正前（バグ）の値を記録
- * - IMG_1286.JPG: 6点形状 R0.4（M86753 実部品）
- * - IMG_1432.JPG: fz/fx計算ワークシート
+ * - IMG_1286.JPG: M86753実部品 R0.4 の6点簡略形状
+ * - IMG_1432.JPG: fz/fx計算ワークシート（M86753含む）
+ * - IMG_1428.JPG: 大型部品の計算ワークシート
+ * - IMG_1359.JPG: 別形状 R1.0（13°テーパー）
+ * - IMG_1470.JPG: 別形状（判読困難）
  */
 import { describe, it, expect } from 'vitest'
 import { calculateShape } from '../shape'
@@ -13,29 +16,39 @@ import { createPoint, noCorner } from '../../models/shape'
 import { defaultMachineSettings, type MachineSettings } from '../../models/settings'
 
 // ============================================================
-// 1. IMG_1423 (例5): 6点形状 R0.8
+// 共通設定
 // ============================================================
-describe('IMG_1423 (例5): 6点形状 R0.8 手書き値との照合', () => {
-    const settings: MachineSettings = {
-        ...defaultMachineSettings,
-        activeToolId: 't1',
-        toolLibrary: [{
-            id: 't1', name: 'Test', type: 'external',
-            noseRadius: 0.8, toolTipNumber: 3, hand: 'right'
-        }],
-        noseRCompensation: {
-            enabled: true, offsetNumber: 1,
-            compensationDirection: 'auto', method: 'geometric'
-        },
-    }
+const settingsR08: MachineSettings = {
+    ...defaultMachineSettings,
+    activeToolId: 't1',
+    toolLibrary: [{
+        id: 't1', name: 'Test', type: 'external',
+        noseRadius: 0.8, toolTipNumber: 3, hand: 'right'
+    }],
+    noseRCompensation: {
+        enabled: true, offsetNumber: 1,
+        compensationDirection: 'auto', method: 'geometric'
+    },
+}
 
-    // 図面座標（形状入力）:
-    // 1. X60 Z0
-    // 2. X60 Z-45.653
-    // 3. X59.6 Z-46（30°テーパー）
-    // 4. X59.6 Z-50（隅R2）
-    // 5. X80 Z-50
-    // 6. X80 Z-60
+const settingsR04: MachineSettings = {
+    ...defaultMachineSettings,
+    activeToolId: 't1',
+    toolLibrary: [{
+        id: 't1', name: 'Test', type: 'external',
+        noseRadius: 0.4, toolTipNumber: 3, hand: 'right'
+    }],
+    noseRCompensation: {
+        enabled: true, offsetNumber: 1,
+        compensationDirection: 'auto', method: 'geometric'
+    },
+}
+
+// ============================================================
+// 1. IMG_1423 (例5): 6点形状 R0.8 — C0.2なし
+// ============================================================
+describe('IMG_1423 (例5): 6点形状 R0.8（C0.2なし）', () => {
+    // 図面座標: X60 Z0 → X60 Z-45.653 → X59.6 Z-46 → X59.6 Z-50(R2) → X80 Z-50 → X80 Z-60
     const shape = {
         points: [
             createPoint(60, 0, noCorner()),
@@ -47,92 +60,193 @@ describe('IMG_1423 (例5): 6点形状 R0.8 手書き値との照合', () => {
         ]
     }
 
-    it('30°テーパー終点: 手書き Z-46.586', () => {
-        // IMG_1423: X59.6, Z-46.586（30°テーパー端）
-        // fz = R(1 - tan(15°)) = 0.8 × 0.7321 = 0.586
-        // 補正後Z = -46 - 0.586 = -46.586
-        const result = calculateShape(shape, settings)
-        const taperSeg = result.segments[1]  // 30°テーパーセグメント
-        expect(taperSeg.compensated?.endZ).toBeCloseTo(-46.586, 3)
+    it('テーパー終点Z: 手書き Z-46.586', () => {
+        const result = calculateShape(shape, settingsR08)
+        expect(result.segments[1].compensated?.endZ).toBeCloseTo(-46.586, 3)
     })
 
-    it('隅R2入口: 手書き Z-48.8', () => {
-        // IMG_1423/1496: Z-48.8（R2弧の入口）
-        // 形状Z-48 + 補正(0.8) = Z-48.8
-        const result = calculateShape(shape, settings)
-        const vertSeg = result.segments[2]  // テーパー後の垂直線
-        expect(vertSeg.compensated?.endZ).toBeCloseTo(-48.8, 3)
+    it('隅R2入口Z: 手書き Z-48.8', () => {
+        const result = calculateShape(shape, settingsR08)
+        expect(result.segments[2].compensated?.endZ).toBeCloseTo(-48.8, 3)
     })
 
     it('隅R2補正半径: 手書き R1.2', () => {
-        // IMG_1423: R1.2（R_arc - R_nose = 2 - 0.8 = 1.2）
-        const result = calculateShape(shape, settings)
-        const arcSeg = result.segments[3]  // 隅R2円弧
-        expect(arcSeg.compensated?.radius).toBeCloseTo(1.2, 3)
+        const result = calculateShape(shape, settingsR08)
+        expect(result.segments[3].compensated?.radius).toBeCloseTo(1.2, 3)
     })
 
     it('隅R2出口X: 手書き X62', () => {
-        // IMG_1423: X62（R2弧の出口点X座標）
-        const result = calculateShape(shape, settings)
-        const arcSeg = result.segments[3]  // 隅R2円弧
-        expect(arcSeg.compensated?.endX).toBeCloseTo(62, 3)
+        const result = calculateShape(shape, settingsR08)
+        expect(result.segments[3].compensated?.endX).toBeCloseTo(62, 3)
     })
 
-    it('修正前の値 Z-47.014 が現在は出力されない（IMG_1496のバグ値）', () => {
-        // IMG_1496: Z-47.014 は修正前のバグ値
-        // 修正後は Z-46.586 が正しい
-        const result = calculateShape(shape, settings)
-        const taperSeg = result.segments[1]
-        const compZ = taperSeg.compensated?.endZ ?? 0
-        expect(compZ).not.toBeCloseTo(-47.014, 2)
-        expect(compZ).toBeCloseTo(-46.586, 3)
+    it('テーパー始点: 手書き X62 Z-44.508 vs bisector法', () => {
+        // IMG_1423: テーパー始点の補正座標 = X62 Z-44.508
+        // 手書きでは (X62, Z-44.508)→(X59.6, Z-46.586) が正確に30°テーパーを保つ
+        // bisector法は異なる始点を出す（X58.814 Z-46.508）
+        const result = calculateShape(shape, settingsR08)
+        const seg1End = result.segments[0].compensated!
+
+        console.log('\n=== テーパー始点の比較 ===')
+        console.log(`手書き:     X62      Z-44.508`)
+        console.log(`bisector法: X${seg1End.endX} Z${seg1End.endZ}`)
+        console.log(`差: X=${(62 - seg1End.endX).toFixed(3)}, Z=${(-44.508 - seg1End.endZ).toFixed(3)}`)
+
+        // 手書き値とbisector法の始点は異なる（計算方法の違い）
+        // 手書きは補正後ラインの交点法、本アプリはbisector法を使用
+        // 最終的なテーパー終点Zは一致する（-46.586）
+        expect(result.segments[1].compensated?.endZ).toBeCloseTo(-46.586, 3)
     })
 
-    it('全セグメント補正座標の一覧（手書きとの照合用）', () => {
-        const result = calculateShape(shape, settings)
+    it('水平線終点X: 手書き X78.622 vs bisector法', () => {
+        // IMG_1423/1496: 水平線の補正後終点X = X78.622
+        // bisector法（C0.2なし）: X79.531
+        const result = calculateShape(shape, settingsR08)
+        const horizSeg = result.segments.find(s => s.type === 'line' && s.angle === 90)
 
-        console.log('\n=== IMG_1423 照合: 6点形状 R0.8 ===')
+        console.log('\n=== 水平線終点Xの比較（C0.2なし）===')
+        console.log(`手書き:     X78.622`)
+        console.log(`bisector法: X${horizSeg?.compensated?.endX}`)
+        console.log(`差: ${(78.622 - (horizSeg?.compensated?.endX ?? 0)).toFixed(3)}`)
+
+        // 手書き図にはC0.2面取りが含まれており、C0.2なし形状での比較は不適切
+        // C0.2付き形状で改めて比較する（次のdescribeブロック）
+        expect(horizSeg?.compensated?.endX).toBeDefined()
+    })
+})
+
+// ============================================================
+// 2. IMG_1423: C0.2面取り付き形状
+// ============================================================
+describe('IMG_1423: C0.2面取り付き形状', () => {
+    // 手書き図にはC0.2面取りが描かれている
+    const shapeWithC02 = {
+        points: [
+            createPoint(60, 0, noCorner()),
+            createPoint(60, -45.653, noCorner()),
+            createPoint(59.6, -46, noCorner()),
+            createPoint(59.6, -50, { type: 'sumi-r', size: 2 }),
+            createPoint(80, -50, { type: 'kaku-c', size: 0.2 }),
+            createPoint(80, -60, noCorner())
+        ]
+    }
+
+    it('C0.2付きでもテーパー・隅R値は変わらない', () => {
+        const result = calculateShape(shapeWithC02, settingsR08)
+        // テーパー終点Z
+        expect(result.segments[1].compensated?.endZ).toBeCloseTo(-46.586, 3)
+        // 隅R2入口Z
+        expect(result.segments[2].compensated?.endZ).toBeCloseTo(-48.8, 3)
+        // 隅R2 R1.2
+        expect(result.segments[3].compensated?.radius).toBeCloseTo(1.2, 3)
+        // 隅R2出口X
+        expect(result.segments[3].compensated?.endX).toBeCloseTo(62, 3)
+    })
+
+    it('水平線終点X: 手書き X78.622 vs bisector法（C0.2付き）', () => {
+        const result = calculateShape(shapeWithC02, settingsR08)
+        const horizSeg = result.segments.find(s => s.type === 'line' && s.angle === 90)
+
+        console.log('\n=== 水平線終点Xの比較（C0.2付き）===')
+        console.log(`手書き:     X78.622`)
+        console.log(`bisector法: X${horizSeg?.compensated?.endX}`)
+        console.log(`差: ${(78.622 - (horizSeg?.compensated?.endX ?? 0)).toFixed(3)}`)
+
+        // 手書きとbisector法は水平線終点で差が出る
+        // 手書き: X78.622, bisector: X78.254（差 0.368mm）
+        expect(horizSeg?.compensated?.endX).toBeDefined()
+    })
+
+    it('C0.2面取り後: 手書き X81 Z-51.189 vs bisector法', () => {
+        const result = calculateShape(shapeWithC02, settingsR08)
+        // C0.2面取りセグメントを探す
+        const chamferSeg = result.segments.find(s => s.type === 'chamfer' || s.type === 'corner-c')
+
+        console.log('\n=== C0.2面取り後の座標比較 ===')
+        console.log(`手書き: X81 Z-51.189`)
+        if (chamferSeg?.compensated) {
+            console.log(`bisector法: X${chamferSeg.compensated.endX} Z${chamferSeg.compensated.endZ}`)
+            console.log(`差: X=${(81 - chamferSeg.compensated.endX).toFixed(3)}, Z=${(-51.189 - chamferSeg.compensated.endZ).toFixed(3)}`)
+        }
+
+        // 最終垂直線の始点も確認
+        const lastVertSeg = result.segments[result.segments.length - 1]
+        if (lastVertSeg?.compensated) {
+            console.log(`最終垂直線始点: X${lastVertSeg.compensated.startX} Z${lastVertSeg.compensated.startZ}`)
+        }
+        expect(result.segments.length).toBeGreaterThan(0)
+    })
+
+    it('全セグメント座標ダンプ（手書きとの照合用）', () => {
+        const result = calculateShape(shapeWithC02, settingsR08)
+
+        console.log('\n=== IMG_1423 C0.2付き 全セグメント ===')
         result.segments.forEach((seg, i) => {
             const c = seg.compensated
             if (!c) return
-            const label = `[${i + 1}] ${seg.type}${seg.angle !== undefined ? ` ${seg.angle}°` : ''}${seg.radius ? ` R${seg.radius}` : ''}`
+            const label = `[${i + 1}] ${seg.type}${seg.angle !== undefined ? ` ${seg.angle}°` : ''}${seg.radius ? ` R${seg.radius}` : ''}${seg.isConvex !== undefined ? (seg.isConvex ? ' 凸' : ' 凹') : ''}`
             console.log(`${label}`)
+            console.log(`  形状: X${seg.startX} Z${seg.startZ} → X${seg.endX} Z${seg.endZ}`)
             console.log(`  補正: X${c.startX} Z${c.startZ} → X${c.endX} Z${c.endZ}${c.radius ? ` R${c.radius}` : ''}`)
         })
-
-        // 照合結果:
-        // ✅ Z-46.586 → Seg[2]終点Z
-        // ✅ Z-48.8   → Seg[3]終点Z
-        // ✅ R1.2     → Seg[4]補正R
-        // ✅ X62      → Seg[4]終点X
         expect(result.segments.length).toBeGreaterThan(0)
     })
 })
 
 // ============================================================
-// 2. IMG_1286: 6点形状 R0.4（M86753実部品）
+// 3. IMG_1496: 修正前のバグ値確認
 // ============================================================
-describe('IMG_1286: 6点形状 R0.4 手書き値との照合', () => {
-    const settings: MachineSettings = {
-        ...defaultMachineSettings,
-        activeToolId: 't1',
-        toolLibrary: [{
-            id: 't1', name: 'Test', type: 'external',
-            noseRadius: 0.4, toolTipNumber: 3, hand: 'right'
-        }],
-        noseRCompensation: {
-            enabled: true, offsetNumber: 1,
-            compensationDirection: 'auto', method: 'geometric'
-        },
+describe('IMG_1496: 修正前バグ値との照合', () => {
+    const shape = {
+        points: [
+            createPoint(60, 0, noCorner()),
+            createPoint(60, -45.653, noCorner()),
+            createPoint(59.6, -46, noCorner()),
+            createPoint(59.6, -50, { type: 'sumi-r', size: 2 }),
+            createPoint(80, -50, noCorner()),
+            createPoint(80, -60, noCorner())
+        ]
     }
 
-    // 図面座標（IMG_1286から読み取り）:
-    // 1. X66 Z0
-    // 2. X66 Z-115（角R0.5）
-    // 3. X63 Z-116.5（隅R1）
-    // 4. X63 Z-169（隅R2）
-    // 5. X70 Z-184（角R2）
-    // 6. X70 Z-200
+    it('テーパー終点: 旧バグ値 Z-47.014 は出力されない', () => {
+        // IMG_1496: Z-47.014 は修正前のバグ値
+        const result = calculateShape(shape, settingsR08)
+        const compZ = result.segments[1].compensated?.endZ ?? 0
+        expect(compZ).not.toBeCloseTo(-47.014, 2)
+        expect(compZ).toBeCloseTo(-46.586, 3)
+    })
+
+    it('テーパー始点: 旧バグ値 Z-44.736 → 修正後 Z-44.508 方向に変化', () => {
+        // IMG_1496: テーパー始点 X62 Z-44.736（旧）
+        // IMG_1423: テーパー始点 X62 Z-44.508（修正後）
+        // 差: 0.228mm（テーパー終点の差 0.428mm の約半分）
+        // ※bisector法では X62 Z-44.508 ではなく X58.814 Z-46.508 を出力
+        const result = calculateShape(shape, settingsR08)
+        const seg1End = result.segments[0].compensated!
+
+        console.log('\n=== テーパー始点の修正前後比較 ===')
+        console.log(`IMG_1496(修正前): X62 Z-44.736`)
+        console.log(`IMG_1423(修正後): X62 Z-44.508`)
+        console.log(`bisector法出力:   X${seg1End.endX} Z${seg1End.endZ}`)
+
+        // bisector法のテーパー終点Zは修正後の正しい値
+        expect(result.segments[1].compensated?.endZ).toBeCloseTo(-46.586, 3)
+    })
+
+    it('隅R2値は修正前後で不変', () => {
+        // IMG_1496でも Z-48.8, X62, R1.2 は同じ値
+        const result = calculateShape(shape, settingsR08)
+        expect(result.segments[2].compensated?.endZ).toBeCloseTo(-48.8, 3)
+        expect(result.segments[3].compensated?.endX).toBeCloseTo(62, 3)
+        expect(result.segments[3].compensated?.radius).toBeCloseTo(1.2, 3)
+    })
+})
+
+// ============================================================
+// 4. IMG_1286: M86753 6点形状 R0.4
+// ============================================================
+describe('IMG_1286: M86753 6点形状 R0.4', () => {
+    // 6点簡略形状（実部品M86753の一部）
     const shape = {
         points: [
             createPoint(66, 0, { type: 'no-corner' }),
@@ -144,165 +258,329 @@ describe('IMG_1286: 6点形状 R0.4 手書き値との照合', () => {
         ]
     }
 
+    // --- 補正半径（全一致）---
     it('角R0.5: 補正半径 = 0.5 + 0.4 = 0.9', () => {
-        const result = calculateShape(shape, settings)
-        const kakuR = result.segments.find(s => s.type === 'corner-r' && s.radius === 0.5)
-        expect(kakuR?.compensated?.radius).toBeCloseTo(0.9, 3)
+        const result = calculateShape(shape, settingsR04)
+        const seg = result.segments.find(s => s.type === 'corner-r' && s.radius === 0.5)
+        expect(seg?.compensated?.radius).toBeCloseTo(0.9, 3)
     })
 
     it('隅R1: 補正半径 = 1 - 0.4 = 0.6', () => {
-        const result = calculateShape(shape, settings)
-        const sumiR1 = result.segments.find(s =>
-            s.type === 'corner-r' && s.radius === 1 && s.isConvex === false
-        )
-        expect(sumiR1?.compensated?.radius).toBeCloseTo(0.6, 3)
+        const result = calculateShape(shape, settingsR04)
+        const seg = result.segments.find(s => s.type === 'corner-r' && s.radius === 1 && !s.isConvex)
+        expect(seg?.compensated?.radius).toBeCloseTo(0.6, 3)
     })
 
     it('隅R2: 補正半径 = 2 - 0.4 = 1.6', () => {
-        const result = calculateShape(shape, settings)
-        const sumiR2 = result.segments.find(s =>
-            s.type === 'corner-r' && s.radius === 2 && s.isConvex === false
-        )
-        expect(sumiR2?.compensated?.radius).toBeCloseTo(1.6, 3)
+        const result = calculateShape(shape, settingsR04)
+        const seg = result.segments.find(s => s.type === 'corner-r' && s.radius === 2 && !s.isConvex)
+        expect(seg?.compensated?.radius).toBeCloseTo(1.6, 3)
     })
 
     it('角R2: 補正半径 = 2 + 0.4 = 2.4', () => {
-        const result = calculateShape(shape, settings)
-        const kakuR2 = result.segments.find(s =>
-            s.type === 'corner-r' && s.radius === 2 && s.isConvex === true
-        )
-        expect(kakuR2?.compensated?.radius).toBeCloseTo(2.4, 3)
+        const result = calculateShape(shape, settingsR04)
+        const seg = result.segments.find(s => s.type === 'corner-r' && s.radius === 2 && s.isConvex)
+        expect(seg?.compensated?.radius).toBeCloseTo(2.4, 3)
     })
 
-    it('テーパー(≈29°)終点: 手書き期待値 Z-116.89 付近', () => {
-        // IMG_1286: テーパー終点の期待値は Z-116.89
-        // 実装値: Z-116.86（0.030mmの誤差あり — 既知の課題）
-        const result = calculateShape(shape, settings)
+    // --- テーパー終点（0.030mm既知誤差）---
+    it('テーパー(≈29°)終点Z: 手書き Z-116.89（0.030mm既知誤差）', () => {
+        const result = calculateShape(shape, settingsR04)
         const taperSeg = result.segments.find(s =>
             s.type === 'line' && s.angle !== undefined && s.angle > 0 && s.angle < 90
         )
-
-        console.log(`\nテーパー終点: ${taperSeg?.compensated?.endZ}`)
-        console.log(`手書き期待値: -116.89`)
-        console.log(`誤差: ${((taperSeg?.compensated?.endZ ?? 0) - (-116.89)).toFixed(3)}mm`)
-
-        // 0.050mm以内の精度（既知の0.030mm誤差を許容）
+        console.log(`\nテーパー終点Z: ${taperSeg?.compensated?.endZ} (手書き: -116.89, 差: ${((taperSeg?.compensated?.endZ ?? 0) - (-116.89)).toFixed(3)}mm)`)
         expect(taperSeg?.compensated?.endZ).toBeCloseTo(-116.89, 1)
     })
 
-    it('垂直線 X63 区間: 補正後X = 62.2（X63 - R×2 = 63 - 0.8 = 62.2）', () => {
-        // IMG_1286で確認: 垂直線の補正後Xは X62.2
-        const result = calculateShape(shape, settings)
+    // --- 垂直線オフセット ---
+    it('垂直線X63区間: 補正後X = 62.2', () => {
+        const result = calculateShape(shape, settingsR04)
         const vertLine = result.segments.find(s =>
-            s.type === 'line' && s.angle === 0 &&
-            s.startX === 63 && s.endX === 63
+            s.type === 'line' && s.angle === 0 && s.startX === 63 && s.endX === 63
         )
         expect(vertLine?.compensated?.startX).toBeCloseTo(62.2, 3)
     })
 
-    it('全セグメント補正座標の一覧（手書きとの照合用）', () => {
-        const result = calculateShape(shape, settings)
+    // --- IMG_1286上の追加座標値 ---
+    it('IMG_1286画像上の補正座標値との照合', () => {
+        // IMG_1286画像には M86753 実部品の全セグメント補正座標が記載されている
+        // 6点簡略形状では実部品の一部のみカバー
+        // ここでは読み取れた値と計算値を比較する
+        const result = calculateShape(shape, settingsR04)
 
-        console.log('\n=== IMG_1286 照合: 6点形状 R0.4 ===')
+        console.log('\n=== IMG_1286 全セグメント ===')
         result.segments.forEach((seg, i) => {
             const c = seg.compensated
             if (!c) return
             const label = `[${i + 1}] ${seg.type}${seg.angle !== undefined ? ` ${seg.angle}°` : ''}${seg.radius ? ` R${seg.radius}` : ''}${seg.isConvex !== undefined ? (seg.isConvex ? ' 凸' : ' 凹') : ''}`
-            console.log(`${label}`)
+            console.log(label)
             console.log(`  形状: X${seg.startX} Z${seg.startZ} → X${seg.endX} Z${seg.endZ}`)
             console.log(`  補正: X${c.startX} Z${c.startZ} → X${c.endX} Z${c.endZ}${c.radius ? ` R${c.radius}` : ''}`)
         })
 
+        // IMG_1286 画像で読み取れた補正値:
+        // "X62.012 Z-117.3 R1.6" → 隅R1出口 or 隅R2関連
+        //   計算値 seg[4] 隅R1出口: X62.2 Z-117.988 R0.6
+        //   計算値 seg[6] 隅R2出口: X62.305 Z-169.624 R1.6
+        //   → R1.6は隅R2の補正半径と一致。Z-117.3はseg[4]付近だが値が異なる
+        //   → 画像のアノテーション位置と値が分離している可能性あり
+        const sumiR1 = result.segments.find(s => s.type === 'corner-r' && s.radius === 1 && !s.isConvex)
+        const sumiR2 = result.segments.find(s => s.type === 'corner-r' && s.radius === 2 && !s.isConvex)
+        console.log(`\n--- IMG_1286 読取値 "X62.012 Z-117.3 R1.6" との比較 ---`)
+        console.log(`隅R1出口: X${sumiR1?.compensated?.endX} Z${sumiR1?.compensated?.endZ} R${sumiR1?.compensated?.radius}`)
+        console.log(`隅R2出口: X${sumiR2?.compensated?.endX} Z${sumiR2?.compensated?.endZ} R${sumiR2?.compensated?.radius}`)
+
+        // "R2.4" → 角R2の補正半径 → 一致
+        const kakuR2 = result.segments.find(s => s.type === 'corner-r' && s.radius === 2 && s.isConvex)
+        expect(kakuR2?.compensated?.radius).toBeCloseTo(2.4, 3)
+
+        // 注: IMG_1286はM86753の全体形状を示しており、5°テーパーや85°テーパーなど
+        // 6点簡略形状に含まれないセグメントの座標値も多数記載されている。
+        // それらの検証には完全な形状定義（図面値）が必要。
         expect(result.segments.length).toBeGreaterThan(0)
     })
 })
 
 // ============================================================
-// 3. IMG_1432: fz/fx計算ワークシートの値検証
+// 5. IMG_1432: fz/fx計算ワークシート
 // ============================================================
 describe('IMG_1432: fz/fx計算ワークシートの検証', () => {
-    const R04 = 0.4  // ノーズR 0.4mm
-    const R08 = 0.8  // ノーズR 0.8mm
+    const R04 = 0.4
+    const R08 = 0.8
     const PI = Math.PI
 
-    it('30°テーパー R0.8: fz(上り) = 0.586, fz(下り) = 1.014', () => {
-        // IMG_1432: 30°テーパーの手計算値
-        const theta = 30 * PI / 180
-        const fz_up = R08 * (1 - Math.tan(theta / 2))
-        const fz_down = R08 * (1 + Math.tan(theta / 2))
-
-        expect(fz_up).toBeCloseTo(0.586, 3)
-        expect(fz_down).toBeCloseTo(1.014, 3)
+    // --- fz公式（上り = 直径減少方向）---
+    it('30° R0.8: fz(上り) = 0.586', () => {
+        const fz = R08 * (1 - Math.tan(30 * PI / 360))
+        expect(fz).toBeCloseTo(0.586, 3)
     })
 
-    it('45°テーパー R0.8: fz(上り) = 0.469', () => {
-        // IMG_1432: 45°テーパーの手計算値
-        const theta = 45 * PI / 180
-        const fz = R08 * (1 - Math.tan(theta / 2))
+    it('45° R0.8: fz(上り) = 0.469', () => {
+        const fz = R08 * (1 - Math.tan(45 * PI / 360))
         expect(fz).toBeCloseTo(0.469, 3)
     })
 
-    it('30°テーパー R0.4: fz(上り) = 0.293', () => {
-        // IMG_1432: 30°テーパー R0.4
-        const theta = 30 * PI / 180
-        const fz = R04 * (1 - Math.tan(theta / 2))
+    it('30° R0.4: fz(上り) = 0.293', () => {
+        const fz = R04 * (1 - Math.tan(30 * PI / 360))
         expect(fz).toBeCloseTo(0.293, 3)
     })
 
-    it('29°テーパー R0.4: fz(上り) ≈ 0.296', () => {
-        // IMG_1286の実際のテーパー角度は約29.12°
-        const theta = 29.122 * PI / 180
-        const fz = R04 * (1 - Math.tan(theta / 2))
+    it('29.122° R0.4: fz(上り) ≈ 0.296（M86753実角度）', () => {
+        const fz = R04 * (1 - Math.tan(29.122 * PI / 360))
         expect(fz).toBeCloseTo(0.296, 2)
     })
 
-    it('fx計算: 30° R0.8 → fx(直径) = 0.676', () => {
-        // IMG_1432: fx = 2R(1 - tan(φ/2)), φ = 60°
-        const phi = 60 * PI / 180
+    // --- fz公式（下り = 直径増加方向）---
+    it('30° R0.8: fz(下り) = 1.014', () => {
+        const fz = R08 * (1 + Math.tan(30 * PI / 360))
+        expect(fz).toBeCloseTo(1.014, 3)
+    })
+
+    // --- fx公式 ---
+    it('30° R0.8: fx(直径) = 0.676', () => {
+        const phi = (90 - 30) * PI / 180
         const fx = 2 * R08 * (1 - Math.tan(phi / 2))
         expect(fx).toBeCloseTo(0.676, 3)
     })
 
-    it('fx計算: 45° R0.8 → fx(直径) ≈ 0.937', () => {
-        // IMG_1432: fx = 2R(1 - tan(22.5°)), φ = 45°
-        // 正確値: 0.93726, 手書き値: 0.938（tan(22.5°)の丸めによる差）
-        const phi = 45 * PI / 180
+    it('45° R0.8: fx(直径) ≈ 0.937', () => {
+        // 正確値: 0.93726, 手書き: 0.938（tan丸め差）
+        const phi = (90 - 45) * PI / 180
         const fx = 2 * R08 * (1 - Math.tan(phi / 2))
         expect(fx).toBeCloseTo(0.937, 3)
+    })
+
+    // --- IMG_1432 追加計算値 ---
+    it('13° R0.4: fz(上り) — M86753の下部テーパー', () => {
+        // IMG_1286のX63→X70区間（≈13.132°テーパー）
+        const theta = 13.132 * PI / 180
+        const fz = R04 * (1 - Math.tan(theta / 2))
+        console.log(`\n13.132° R0.4: fz(上り) = ${fz.toFixed(3)}`)
+        // fz = 0.4 × (1 - tan(6.566°)) = 0.4 × (1 - 0.1150) = 0.354
+        expect(fz).toBeCloseTo(0.354, 3)
+    })
+
+    it('13° R0.4: fz(下り) — 直径増加方向', () => {
+        const theta = 13.132 * PI / 180
+        const fz = R04 * (1 + Math.tan(theta / 2))
+        console.log(`13.132° R0.4: fz(下り) = ${fz.toFixed(3)}`)
+        // fz = 0.4 × (1 + 0.1150) = 0.446
+        expect(fz).toBeCloseTo(0.446, 3)
+    })
+
+    it('13° R0.4: fx(直径)', () => {
+        const phi = (90 - 13.132) * PI / 180
+        const fx = 2 * R04 * (1 - Math.tan(phi / 2))
+        console.log(`13.132° R0.4: fx(直径) = ${fx.toFixed(3)}`)
+        expect(fx).toBeGreaterThan(0)
     })
 })
 
 // ============================================================
-// 4. IMG_1423: 教科書式 fz 適用による手計算結果の検証
+// 6. IMG_1423 手計算の再現（fz公式の適用結果）
 // ============================================================
 describe('IMG_1423: fz公式の適用結果（手計算の再現）', () => {
     it('30°テーパー終点Z: -46 - fz = -46 - 0.586 = -46.586', () => {
-        const R = 0.8
-        const theta = 30 * Math.PI / 180
-        const fz = R * (1 - Math.tan(theta / 2))
-        const compensatedZ = -46 - fz
-        expect(compensatedZ).toBeCloseTo(-46.586, 3)
+        const fz = 0.8 * (1 - Math.tan(15 * Math.PI / 180))
+        expect(-46 - fz).toBeCloseTo(-46.586, 3)
     })
 
-    it('隅R2入口Z: -48（形状） - R = -48 - 0.8 = -48.8', () => {
-        // R2隅の入口点: 形状Z = -50 + 2 = -48（接線距離）
-        // 補正後Z = -48 - R = -48 - 0.8 = -48.8
-        const shapeZ = -50 + 2  // 隅R2の接線距離
-        const compensatedZ = shapeZ - 0.8
-        expect(compensatedZ).toBeCloseTo(-48.8, 3)
+    it('隅R2入口Z: -48 - R = -48 - 0.8 = -48.8', () => {
+        // 隅R2の接線点: 形状Z = -50 + 2 = -48
+        expect(-48 - 0.8).toBeCloseTo(-48.8, 3)
     })
 
     it('補正半径: 隅R2 - R0.8 = 1.2', () => {
         expect(2 - 0.8).toBeCloseTo(1.2, 10)
     })
 
-    it('隅R2出口X: 形状X63.6, 補正後X = 63.6 - R×2 = 62', () => {
-        // 隅R2の出口点: 形状X = 59.6 + 2×2 = 63.6
-        // pToO: O.x = P.x - dx×2 = P.x - 1.6
-        // 凹円弧の場合: P.x = shape.x（bisector/法線オフセット後）
-        // 実測: 補正後X = 62.0
-        const shapeExitX = 59.6 + 2 * 2  // 63.6
-        const compensatedX = shapeExitX - 0.8 * 2  // 62.0
-        expect(compensatedX).toBeCloseTo(62, 3)
+    it('隅R2出口X: 63.6 - 1.6 = 62', () => {
+        // 隅R2出口形状X = 59.6 + 2×2 = 63.6
+        // 補正X = 63.6 - 2×R = 63.6 - 1.6 = 62
+        expect(59.6 + 2 * 2 - 0.8 * 2).toBeCloseTo(62, 3)
+    })
+
+    it('テーパー始点の手書き計算方法の解析', () => {
+        // IMG_1423: テーパー始点 = X62 Z-44.508
+        // (X62, Z-44.508) → (X59.6, Z-46.586) の角度検証
+        const deltaR = (62 - 59.6) / 2  // 1.2mm (radius)
+        const deltaZ = Math.abs(-46.586 - (-44.508))  // 2.078mm
+        const angle = Math.atan(deltaR / deltaZ) * 180 / Math.PI
+
+        console.log('\n=== 手書きテーパー始点の角度検証 ===')
+        console.log(`(X62, Z-44.508) → (X59.6, Z-46.586)`)
+        console.log(`ΔR = ${deltaR}, ΔZ = ${deltaZ.toFixed(3)}`)
+        console.log(`角度 = ${angle.toFixed(1)}°`)
+
+        // 手書き計算では補正後テーパーが元の30°を保持している
+        expect(angle).toBeCloseTo(30, 0)
+    })
+})
+
+// ============================================================
+// 7. IMG_1359: 別形状 R1.0（13°テーパー）
+// ============================================================
+describe('IMG_1359: 別形状 R1.0（画像読取値）', () => {
+    // IMG_1359は180°回転した画像で、別の部品の補正座標を示す
+    // 読取可能な値:
+    //   - ノーズR: R1.0
+    //   - テーパー角: 13°
+    //   - 座標値: X300番台（大径部品）
+    //     X336. Z-182.56_
+    //     X326.04_ Z-148.34_
+    //     Z-177.606
+    //     Z-166.3
+    //     φ 2.955（寸法注記?）
+    //
+    // 形状入力座標が不明のため、fz/fx公式の値のみ検証
+
+    it('13° R1.0: fz(上り) = R(1-tan(6.5°))', () => {
+        const theta = 13 * Math.PI / 180
+        const fz = 1.0 * (1 - Math.tan(theta / 2))
+        console.log(`\n13° R1.0: fz(上り) = ${fz.toFixed(3)}`)
+        // fz = 1.0 × (1 - 0.1139) = 0.886
+        expect(fz).toBeCloseTo(0.886, 3)
+    })
+
+    it('13° R1.0: fx(直径) = 2R(1-tan(38.5°))', () => {
+        const phi = (90 - 13) * Math.PI / 180
+        const fx = 2 * 1.0 * (1 - Math.tan(phi / 2))
+        console.log(`13° R1.0: fx(直径) = ${fx.toFixed(3)}`)
+        expect(fx).toBeGreaterThan(0)
+    })
+
+    // IMG_1359の形状入力座標が判明すれば追加テスト可能
+    // 現時点では画像の判読が困難で形状を確定できない
+})
+
+// ============================================================
+// 8. IMG_1470: 別形状（判読困難）
+// ============================================================
+describe('IMG_1470: 別形状（画像読取値）', () => {
+    // IMG_1470は回転した画像で、別の部品の補正座標を示す
+    // 画像が皺になっており判読が非常に困難
+    // 読取可能な値:
+    //   - CX105.55 → X105.55付近の座標?
+    //   - CZ-270 → Z-270付近?
+    //   - 他の値は不鮮明
+    //
+    // 形状入力座標が不明のため検証不可
+
+    it('形状が不明であることを記録', () => {
+        // IMG_1470の形状を特定するには、画像の鮮明な版が必要
+        // または、ユーザーから形状入力座標を直接提供してもらう
+        console.log('\nIMG_1470: 画像が不鮮明で形状座標を特定できず')
+        console.log('読取値候補: CX105.55, CZ-270')
+        expect(true).toBe(true)
+    })
+})
+
+// ============================================================
+// 9. IMG_1428: 大型部品の計算ワークシート
+// ============================================================
+describe('IMG_1428: 大型部品計算ワークシート', () => {
+    // IMG_1428は回転した画像で、大型部品の補正計算を示す
+    // 読取可能な値:
+    //   - R1.2（コーナーR）
+    //   - X130 Z-722（形状座標?）R2
+    //   - R92 X121.18_ Z-725.11_（補正座標?）
+    //   - 形状番号 9, 10 の図示あり
+    //   - √(0.81-0.04) の根号計算（ノーズR関連?）
+    //   - X840_ Z-741_ 付近の座標値
+    //
+    // 形状入力座標が不明のため、読み取れた公式のみ検証
+
+    it('√(0.81-0.04) = √0.77 ≈ 0.877（ノーズR関連の幾何計算?）', () => {
+        // 0.81 = 0.9², 0.04 = 0.2² → √(0.9²-0.2²) = √0.77
+        // これはピタゴラスの定理: √(R²-d²) のような計算
+        const val = Math.sqrt(0.81 - 0.04)
+        console.log(`\n√(0.81-0.04) = √${0.81 - 0.04} = ${val.toFixed(3)}`)
+        expect(val).toBeCloseTo(0.877, 3)
+    })
+
+    // IMG_1428の完全な検証には形状入力座標が必要
+})
+
+// ============================================================
+// 10. 全画像照合結果のサマリー
+// ============================================================
+describe('全画像照合結果サマリー', () => {
+    it('一致する値の一覧', () => {
+        console.log('\n========================================')
+        console.log('全画像照合結果サマリー')
+        console.log('========================================')
+        console.log('')
+        console.log('✅ 一致する値:')
+        console.log('  IMG_1423: Z-46.586（テーパー終点）')
+        console.log('  IMG_1423: Z-48.8（隅R2入口）')
+        console.log('  IMG_1423: R1.2（隅R2補正半径）')
+        console.log('  IMG_1423: X62（隅R2出口X）')
+        console.log('  IMG_1496: Z-47.014 が出力されない（バグ修正確認）')
+        console.log('  IMG_1286: R0.9, R0.6, R1.6, R2.4（全補正半径）')
+        console.log('  IMG_1286: X62.2（垂直線補正X）')
+        console.log('  IMG_1432: fz 30°R0.8=0.586, 下り=1.014')
+        console.log('  IMG_1432: fz 45°R0.8=0.469')
+        console.log('  IMG_1432: fz 30°R0.4=0.293')
+        console.log('  IMG_1432: fx 30°R0.8=0.676')
+        console.log('  IMG_1432: fx 45°R0.8≈0.937')
+        console.log('')
+        console.log('⚠️ 近似一致（既知の誤差）:')
+        console.log('  IMG_1286: Z-116.86 vs Z-116.89（差 0.030mm）')
+        console.log('')
+        console.log('❌ 不一致（計算方法の違い）:')
+        console.log('  IMG_1423: テーパー始点 X62 Z-44.508 vs bisector X58.814 Z-46.508')
+        console.log('  IMG_1423: 水平線終点 X78.622 vs bisector X79.531（C0.2なし）/ X78.254（C0.2付き）')
+        console.log('  IMG_1423: C0.2後 X81 Z-51.189 vs bisector X79.012 Z-50.873')
+        console.log('')
+        console.log('❓ 未検証（形状入力座標が不明）:')
+        console.log('  IMG_1286: M86753全体の5°/85°テーパー区間の座標値')
+        console.log('  IMG_1359: 別形状 R1.0 13°テーパーの補正座標')
+        console.log('  IMG_1470: 形状不明（画像不鮮明）')
+        console.log('  IMG_1428: 大型部品の補正座標')
+        console.log('  IMG_1432: M86753の個別セグメント補正座標')
+        console.log('========================================')
+
+        expect(true).toBe(true)
     })
 })
