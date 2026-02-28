@@ -138,8 +138,14 @@ export function calculateShape(
     }
 
     const warnings: string[] = []
-    let currentX = shape.points[0].x
-    let currentZ = shape.points[0].z
+
+    // 始点逃し: 形状修正方式（前処理）
+    const workingPoints = (shape.retract?.start && shape.retract.start > 0)
+        ? applyStartRetract(shape.points, shape.retract.start)
+        : shape.points
+
+    let currentX = workingPoints[0].x
+    let currentZ = workingPoints[0].z
     let i = 0
 
     // ノーズR補正値を取得（補正が有効な場合のみ）
@@ -154,16 +160,16 @@ export function calculateShape(
     // 前のセグメントの角度を追跡（隅R進入点調整に使用）
     let prevSegmentAngle: number | undefined = undefined
 
-    while (i < shape.points.length - 1) {
-        const nextPoint = shape.points[i + 1]
+    while (i < workingPoints.length - 1) {
+        const nextPoint = workingPoints[i + 1]
 
-        if (nextPoint.corner.type !== 'none' && i + 2 < shape.points.length) {
-            const afterNextPoint = shape.points[i + 2]
+        if (nextPoint.corner.type !== 'none' && i + 2 < workingPoints.length) {
+            const afterNextPoint = workingPoints[i + 2]
             const p2HasR = nextPoint.corner.type === 'sumi-r' || nextPoint.corner.type === 'kaku-r'
             const p3HasR = afterNextPoint.corner.type === 'sumi-r' || afterNextPoint.corner.type === 'kaku-r'
 
-            if (p2HasR && p3HasR && i + 3 < shape.points.length) {
-                const p4 = shape.points[i + 3]
+            if (p2HasR && p3HasR && i + 3 < workingPoints.length) {
+                const p4 = workingPoints[i + 3]
                 const currentPointObj = { x: currentX, z: currentZ, corner: { type: 'none' as const, size: 0 }, id: 'temp' }
                 const adjacentResult = calculateAdjacentCorners(currentPointObj as Point, nextPoint, afterNextPoint, p4)
 
@@ -407,7 +413,7 @@ export function calculateShape(
         }
 
         // この点に溝がある場合、溝を展開
-        const currentPoint = shape.points[i]
+        const currentPoint = workingPoints[i]
         if (currentPoint && currentPoint.groove) {
             const grooveEnd = expandGrooveToSegments(currentX, currentZ, currentPoint.groove, results)
             currentX = grooveEnd.endX
@@ -476,7 +482,75 @@ export function calculateShape(
         }
     }
 
+    // 終点逃し: 補正後調整方式（後処理）
+    if (shape.retract?.end && shape.retract.end > 0) {
+        applyEndRetract(results, shape.points, shape.retract.end)
+    }
+
     return { segments: results, warnings }
+}
+
+/**
+ * 始点逃しを適用（形状修正方式）
+ * 先頭から連続して同じX値を持つ点のX座標を逃し量分シフト
+ */
+function applyStartRetract(points: Point[], startRetract: number): Point[] {
+    if (points.length === 0) return points
+    const firstX = points[0].x
+    return points.map((p, i) => {
+        if (i === 0 || (p.x === firstX && points[i - 1].x === firstX)) {
+            return { ...p, x: round3(p.x + startRetract) }
+        }
+        return p
+    })
+}
+
+/**
+ * 終点逃しを適用（補正後調整方式）
+ * 補正済み座標に対してX座標をシフトし、面取りのZ座標を45°維持で再計算
+ */
+function applyEndRetract(segments: SegmentResult[], originalPoints: Point[], endRetract: number): void {
+    if (segments.length === 0) return
+    const lastX = originalPoints[originalPoints.length - 1].x
+
+    // 後方から走査して最終径に一致するセグメントを特定
+    for (let i = segments.length - 1; i >= 0; i--) {
+        const seg = segments[i]
+        const endAtLastX = Math.abs(seg.endX - lastX) < 0.001
+        const startAtLastX = Math.abs(seg.startX - lastX) < 0.001
+
+        if (!endAtLastX && !startAtLastX) break
+
+        // 形状座標もシフト（プレビュー用）
+        if (endAtLastX) seg.endX = round3(seg.endX + endRetract)
+        if (startAtLastX) seg.startX = round3(seg.startX + endRetract)
+
+        // 補正座標のシフト
+        if (seg.compensated) {
+            if (endAtLastX) seg.compensated.endX = round3(seg.compensated.endX + endRetract)
+            if (startAtLastX) seg.compensated.startX = round3(seg.compensated.startX + endRetract)
+
+            // 角C（面取り）: 出口Xがシフトされ入口Xが変わらない場合、45°維持でZ再計算
+            if (seg.type === 'corner-c' && endAtLastX && !startAtLastX) {
+                const entryX = seg.compensated.startX
+                const entryZ = seg.compensated.startZ
+                seg.compensated.endZ = round3(entryZ - (seg.compensated.endX - entryX) / 2)
+            }
+        }
+    }
+
+    // Z変更の伝播: 面取り後のセグメント開始点を合わせる
+    for (let i = 0; i < segments.length - 1; i++) {
+        const curr = segments[i]
+        const next = segments[i + 1]
+        if (curr.compensated && next.compensated) {
+            if (Math.abs(next.compensated.startX - curr.compensated.endX) > 0.001 ||
+                Math.abs(next.compensated.startZ - curr.compensated.endZ) > 0.001) {
+                next.compensated.startX = curr.compensated.endX
+                next.compensated.startZ = curr.compensated.endZ
+            }
+        }
+    }
 }
 
 /**
@@ -741,7 +815,7 @@ function determineGCode(isLeftTurn: boolean, _type: 'kaku-r' | 'sumi-r', setting
  * @param prevSegmentAngle 前のセグメントのテーパー角度（度）- 隅R進入点調整に使用
  * @returns ワーク形状上の接点座標、Rなど
  */
-function calculateCorner(p1: Point, p2: Point, p3: Point, prevSegmentAngle?: number): CornerCalculation | null {
+function calculateCorner(p1: Point, p2: Point, p3: Point, _prevSegmentAngle?: number): CornerCalculation | null {
     const originalSize = p2.corner.size
     if (originalSize <= 0) return null
 

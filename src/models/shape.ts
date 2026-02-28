@@ -84,6 +84,11 @@ export interface CornerCalculation {
 // 形状全体
 export interface Shape {
     points: Point[]
+    // 逃し（アプローチ・リトラクト）設定
+    retract?: {
+        start?: number  // 始点逃し（直径値 mm）
+        end?: number    // 終点逃し（直径値 mm）
+    }
 }
 
 // 新しい点を作成（第3引数にtypeまたはcornerを受け取れるようにして後方互換性を維持）

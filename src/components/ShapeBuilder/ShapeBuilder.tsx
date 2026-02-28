@@ -47,6 +47,10 @@ export function ShapeBuilder() {
     // 点編集モード
     const [editingPointIndex, setEditingPointIndex] = useState<number | null>(null)
 
+    // 逃し（リトラクト）
+    const [startRetract, setStartRetract] = useState('')
+    const [endRetract, setEndRetract] = useState('')
+
     // 新規追加：要素タイプ
     const [segmentType, setSegmentType] = useState<'line' | 'arc'>('line')
     const [arcRadius, setArcRadius] = useState('')
@@ -315,7 +319,12 @@ export function ShapeBuilder() {
     }
 
     const calculateAll = () => {
-        const result = calculateShape(shape, machineSettings)
+        const startR = parseFloat(startRetract) || 0
+        const endR = parseFloat(endRetract) || 0
+        const shapeWithRetract: Shape = (startR > 0 || endR > 0)
+            ? { ...shape, retract: { start: startR || undefined, end: endR || undefined } }
+            : shape
+        const result = calculateShape(shapeWithRetract, machineSettings)
         const formatted = formatResults(result)
         setCalculatedResults(formatted)
         setShowResults(true)
@@ -1008,6 +1017,37 @@ export function ShapeBuilder() {
                             )}
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* 逃し設定 */}
+            {shape.points.length >= 2 && machineSettings.noseRCompensation.enabled && (
+                <div className="retract-section">
+                    <div className="section-label">逃し（直径値）</div>
+                    <div className="input-row-compact">
+                        <div className="input-group-inline">
+                            <label>始点</label>
+                            <input
+                                type="number"
+                                className="step-input small"
+                                value={startRetract}
+                                onChange={(e) => setStartRetract(e.target.value)}
+                                placeholder="0"
+                                step="0.1"
+                            />
+                        </div>
+                        <div className="input-group-inline">
+                            <label>終点</label>
+                            <input
+                                type="number"
+                                className="step-input small"
+                                value={endRetract}
+                                onChange={(e) => setEndRetract(e.target.value)}
+                                placeholder="0"
+                                step="0.1"
+                            />
+                        </div>
+                    </div>
                 </div>
             )}
 
