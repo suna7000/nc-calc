@@ -16,6 +16,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 NC-Calc is a web-based NC (Numerical Control) lathe coordinate calculation tool built as a Progressive Web App (PWA). It helps CNC machinists calculate precise coordinates for lathe operations including corner treatments (R/C), nose radius compensation, groove operations, and taper calculations. The application is designed for field use by machining professionals.
 
 **Tech Stack**: React 19 + TypeScript + Vite 7 + Vitest
+**Styling**: Vanilla CSS (no framework)
+**Storage**: localStorage (settings, tool library, shape history)
+**Diagrams**: SVG-based preview rendering
+**PWA**: vite-plugin-pwa, app name "NC旋盤座標計算機", standalone display
 
 ## Common Commands
 
@@ -72,11 +76,21 @@ The application uses a point-based shape building approach inspired by MAZATROL 
    - Handles bisector calculation at corner nodes for accurate taper-to-taper connections
    - Supports different tool tip numbers (1-9) with proper offset vectors
 
+   **Tool Tip Offset Table (V_tip, radius values)**:
+   | Tip | X offset | Z offset | Typical use |
+   |:---:|:--------:|:--------:|:------------|
+   | 3   | +R       | +R       | External / front / right-hand |
+   | 2   | -R       | -R       | Internal / front / right-hand |
+   | 1   | -R       | +R       | Internal / rear |
+   | 4   | +R       | -R       | External / rear |
+   | 8   | +R       | 0        | Face / X-direction relief |
+
 3. **Specialized Calculators**:
    - `arc.ts`: Standalone arc calculations (circular interpolation)
    - `chamfer.ts`: Chamfer geometry
    - `groove.ts`: Groove toolpath generation
    - `taper.ts`: Taper angle calculations
+   - `advancedGeometry.ts`: Peter Smid advanced geometry (taper inverse calculation, arc center finding, line-arc intersection)
 
 ### Key Algorithms
 
@@ -123,14 +137,11 @@ The application uses a point-based shape building approach inspired by MAZATROL 
 ### Testing Strategy
 
 **Test Organization** (`src/calculators/__tests__/`):
-- 20+ test files covering ~1,800 lines
-- Key test suites:
-  - `adjacent_corners.test.ts`: R-R connection edge cases
-  - `koujoucho_clip_logic.test.ts`: Factory Manager expanded R logic
-  - `nc_points.test.ts`: Basic coordinate calculations
-  - `nusumi_geometry.test.ts`: Corner geometry validation
-  - `normal_vector_audit.test.ts`: Nose R compensation verification
-  - `user_*.test.ts`: Regression tests for reported issues
+- 49 test files organized by category:
+  - Shape & corners: `adjacent_corners`, `koujoucho_clip_logic`, `nc_points`, `nusumi_geometry`
+  - Nose R compensation: `normal_vector_audit`, `bisector_*`, `nose_r_fix_verification`, `total_truth_audit`
+  - Direction/turning: `direction_reversal`, `internal_turning`, `other_tool_tips`, `toolpost_*`
+  - Regression: `user_*.test.ts` (reported issues), `debug_*.test.ts`
 
 **Testing Approach**:
 - Most tests verify calculated coordinates against expected values
@@ -156,12 +167,6 @@ The application uses a point-based shape building approach inspired by MAZATROL 
 - Continuous corner R may produce unusual coordinates if S-curve threshold too loose
 - Zero-gap R-R connections require special handling
 
-### Recently Fixed Issues (Reference for Future Work)
-- ✅ **Taper line compensation error** (2026-02-24): -0.428mm systematic error in 30° taper lines
-  - Root causes: angle info loss, wrong bisector formula, double offset application
-  - Solution: Taper-specific fz formula with n={0,0} approach
-  - See: `docs/nose_r_fix_2026-02-24/` for complete analysis
-
 ## Documentation
 
 Extensive domain knowledge in `docs/`:
@@ -173,133 +178,35 @@ Extensive domain knowledge in `docs/`:
 - `bisector_method_z_offset_implementation.md`: Implementation notes for conditional dz
 - `bisector_z_offset_future_validation.md`: Unvalidated areas and future work roadmap
 - `handover_*.md`: Historical context on specific fixes/features
+- **Peter Smid "CNC Programming Handbook"** (Ch. 26-27): Reference for nose R compensation formulas and advanced geometry
 
 ## Development Guidelines
 
 - X coordinates are always in **diameter** throughout the codebase (convert to radius only for geometric calculations)
 - Use `round3()` helper to round to 3 decimal places (±0.001mm precision)
+- Calculation functions in `src/calculators/` should be pure functions where possible
 - When modifying corner calculations, verify against test fixtures in `adjacent_corners.test.ts`
 - G02/G03 determination depends on `toolPost` and `cuttingDirection` settings
 - For nose R changes, consult `noseRCompensation.ts` comments and `nose_r_compensation_reference.md`
 
-### Critical Implementation Detail 1: Taper Line Compensation Fix (2026-02-24)
+### Nose R Compensation: Taper Lines
 
-**Location**: `src/calculators/noseRCompensation.ts` → `calculateDzForTaper()` and node calculation
+**Location**: `CenterTrackCalculator.calculateWithBisector()` in `noseRCompensation.ts`
 
-**Status** (2026-02-24): ✅ Complete - Taper compensation error eliminated (-0.428mm → 0.000mm)
+Key concepts for taper line compensation:
+- **Taper detection**: `isTaper()` method — line segments where `angle != 0` and `angle != 90`
+- **Taper segments use n={0,0}**: No perpendicular offset; P coordinate = geometric coordinate
+- **fz formula** (Peter Smid): `fz = R(1 - tan(θ/2))` standard, `fz = R(1 + tan(θ/2))` for diameter-increasing direction
+- **Direction determined by diameter change** (endX vs startX), NOT by Z coordinate
+- **Bisector distance**: `R × tan(θ/2)` — NOT `R / cos(θ/2)` (the latter overestimates by 41% at 90°)
+- See: `docs/nose_r_fix_2026-02-24/` and `docs/quick_reference.md`
 
-**Problem**: 30° taper lines had systematic -0.428mm error due to:
-1. ❌ `angle` information lost in shape.ts → noseRCompensation.ts transfer
-2. ❌ Bisector distance using `R/cos(θ/2)` instead of `R×tan(θ/2)`
-3. ❌ No taper-specific compensation function (fz formula)
-4. ❌ Bisector method distorting straight line segments
-5. ❌ Double application: perpendicular offset + fz
+### Nose R Compensation: Z-Offset (Hybrid bz-based Solution)
 
-**Solution - Taper-Specific Approach**:
-```typescript
-// 1. Taper detection
-function isTaperSegment(seg: Segment): boolean {
-    return seg.type === 'line' &&
-           seg.angle !== undefined &&
-           seg.angle !== 0 &&
-           seg.angle !== 90
-}
+**Location**: `calculateDzFromBisector()` in `noseRCompensation.ts`
 
-// 2. For taper segments: n = {0, 0} (NO perpendicular offset)
-if (isTaperSegment(seg)) {
-    n = { nx: 0, nz: 0 }  // P coordinate = geometric coordinate
-}
-
-// 3. Taper-specific dz using fz formula
-function calculateDzForTaper(angle, noseR, tipNumber, isDiameterIncreasing) {
-    const thetaRad = (angle * Math.PI) / 180
-    const halfAngleRad = thetaRad / 2
-    const factor = isDiameterIncreasing
-        ? (1 + Math.tan(halfAngleRad))  // Descending: fz = R(1+tan(θ/2))
-        : (1 - Math.tan(halfAngleRad))  // Ascending: fz = R(1-tan(θ/2))
-    return noseR * factor * sign
-}
-
-// 4. Direction by DIAMETER change (NOT Z coordinate)
-const isDiameterIncreasing = seg.endX > seg.startX
-```
-
-**Key Concepts**:
-- **fz is TOTAL compensation** (not additional): includes perpendicular offset component
-- **Taper coordinate model**: P = geometric (no offset), O = P - fz
-- **Non-taper coordinate model**: P = geometric + perpendicular offset, O = P - dz
-- **Direction terminology**: "Ascending taper" = diameter decreasing (上りテーパー)
-
-**Bisector Distance Fix**:
-```typescript
-// ❌ Wrong: R/cos(θ/2) - overestimates by 41% for 90° corner
-const dist = noseR / Math.max(0.01, cosHalf)
-
-// ✅ Correct: R×tan(θ/2)
-const sinHalf = Math.sqrt((1.0 - dot) / 2.0)
-const tanHalf = sinHalf / Math.max(0.01, cosHalf)
-const dist = noseR * tanHalf
-```
-
-**Critical Documents**:
-- `docs/nose_r_fix_2026-02-24/完全ドキュメント_改訂版.md` - Complete analysis (⭐ START HERE)
-- `docs/nose_r_fix_2026-02-24/README.md` - Executive summary
-- `docs/quick_reference.md` - DO/DON'T quick reference
-
-**Validation**:
-- ✅ User's hand calculation (proven by actual machining): Z-46.586
-- ✅ App output after fix: Z-46.586 (0.000mm error)
-- ✅ Segment shape preserved (30° angle maintained)
-
----
-
-### Critical Implementation Detail 2: Hybrid Z-Offset Solution (Phase 2 Complete)
-
-**Location**: `src/calculators/noseRCompensation.ts` → `calculateDzFromBisector()` function
-
-**Status** (2026-02-21): ✅ Phase 2 Complete - Hybrid solution implemented and validated (108 tests passing)
-
-**Hybrid Solution** combines bisector Z-component (bz) analysis with concave arc handling:
-
-```typescript
-// Rule 1: Concave arcs (隅R) always need offset
-if (isConvex === false) return noseR × sign
-
-// Rule 2: Convex arcs (角R) & Lines use bz-based detection
-if (|bz| < 0.01) return 0      // Horizontal normals
-else return noseR × sign        // Angled normals
-```
-
-**Why Hybrid?**
-- **Pure bz-based fails for concave arcs**: Even when bz≈0, concave arcs need offset (tool must reach into concave region)
-- **Works perfectly for convex arcs & lines**: bz-based detection eliminates most isConvex dependencies
-- **Best of both worlds**: Mathematical foundation + practical edge case handling
-
-**Mathematical Foundation**:
-- **Formula**: `P = ref + b̂ × dist`, therefore `Pz = refZ + bz × dist`
-- **Numerical proof**: bz × dist = Pz - refZ (-0.7068 × 0.4 = -0.2827mm, exact match)
-- **Causality**: When normals are horizontal (bz≈0), Pz≈refZ, so no additional Z offset needed
-
-**Validation Results** (Tasks 1-3 + Phase 2):
-- ✅ Direction reversal (Task 3-1): Solution is direction-invariant
-- ✅ Internal turning (Task 3-2): Works for external/internal (sideSign reversal)
-- ✅ Other tool tips (Task 3-3): bz value independent of tip number
-- ✅ Concave arcs (Phase 2): Hybrid approach handles edge case
-- ✅ **All 108 tests pass** (97 existing + 9 new + 2 others)
-
-**Key Documents**:
-- `docs/bisector_general_solution_verified.md` - Complete verification report (⭐ START HERE)
-- `docs/bisector_algorithm_mathematical_analysis.md` - Mathematical proof
-- `docs/phase2_implementation_plan.md` - Implementation details
-- `docs/bisector_method_z_offset_implementation.md` - Original implementation notes
-
-**Benefits Over Pure isConvex**:
-- ✅ Eliminates isConvex for convex arcs & lines (majority of cases)
-- ✅ Direction-invariant (works forward and backward)
-- ✅ Works for internal/external turning
-- ✅ All tool tip numbers supported
-- ⚠️ Still uses isConvex for concave arc detection (necessary constraint)
-
-**Next Steps (Phase 3)**:
-- Monitor in production with `USE_BZ_BASED_DZ = true`
-- Consider geometric curvature detection to eliminate final isConvex dependency
+Hybrid rule combining bisector Z-component analysis with concave arc handling:
+- **Concave arcs (sumi-R)**: Always apply Z-offset = noseR × sign
+- **Convex arcs (kaku-R) & lines**: Use bisector Z-component (bz) — if `|bz| < 0.01` then dz=0, else dz = noseR × sign
+- Direction-invariant, works for all tool tip numbers and internal/external turning
+- See: `docs/bisector_general_solution_verified.md` and `docs/bisector_algorithm_mathematical_analysis.md`
