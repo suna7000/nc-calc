@@ -1057,18 +1057,28 @@ function calculateAdjacentCorners(p1: Point, p2: Point, p3: Point, p4: Point): a
         const h = Math.abs(x3 - x1)
         // S字自動計算の発動条件:
         // (1) 頂点間がほぼ同一（l2 < 0.1）— 従来のMazatrol的S字
-        // (2) 同タイプの隣接R（両方sumi-rまたは両方kaku-r）で、Rが段差を超えている
+        // (2) 90°ステップ面で同タイプの隣接Rの合計が段差を超えている場合
         //     — 「段差がR分よりも小さい場合」の二円弧遷移（工場長のネタ帳公式）
-        //     個別計算では auto-shrink が発生し、図面のR値を保てない
-        //     混合タイプ（sumi-r + kaku-r）は独立コーナーとして個別計算に任せる
+        //     — 90°ステップ: 段差面が両壁に直交（u1·u2 ≈ 0）
+        //     — テーパー（斜線）接続は対象外: 個別計算に任せる
+        //     — 混合タイプ（sumi-r + kaku-r）は同方向回転のため isScurve=false で除外済み
         const sameCornerType = p2.corner.type === p3.corner.type
-        const rExceedsGap = sameCornerType && (R1 >= l2 * 0.99 || R2 >= l2 * 0.99)
-        if (h < targetDist * 0.95 && (l2 < 0.1 || rExceedsGap)) {
+        const is90Step = Math.abs(u1.x * u2.x + u1.z * u2.z) < 0.1
+        const combinedExceedsGap = sameCornerType && is90Step && (R1 + R2) >= l2 * 0.99
+        if (h < targetDist * 0.95 && (l2 < 0.1 || combinedExceedsGap)) {
             const dz_total = Math.sqrt(Math.max(0, targetDist * targetDist - h * h))
 
             // Zの配分 (半径比)
             const dz1 = dz_total * (R1 / targetDist)
             const dz2 = dz_total * (R2 / targetDist)
+
+            // 安全チェック: 円弧が隣接セグメントの範囲を超えないか
+            // dz1 > l1 なら、arc1 の進入点がP1-P2セグメントの外に出る
+            // dz2 > l3 なら、arc2 の終了点がP3-P4セグメントの外に出る
+            if (dz1 > l1 * 0.99 || dz2 > l3 * 0.99) {
+                // セグメント外に出る → 個別計算（auto-shrink）にフォールバック
+                return null
+            }
 
             // 移動方向を決定 (u1, u3 の逆に逃がす)
             const c1 = { x: x1, z: p2.z - u1.z * dz1 }
