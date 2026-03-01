@@ -729,127 +729,113 @@ describe('IMG_1376: R0.7 トレースルート計算（デバッグ）', () => {
 
 describe('IMG_1388: R0.8 ステップアッププロファイル', () => {
     // ================================================================
-    // 画像読取り値（補正座標、機械座標系Z）:
+    // 画像読取り値（素材座標 = プロファイル座標）:
     //   X85.   Z-449.118  — φ85 Z平行区間
-    //   X98.143 Z-457.934 — プロファイル上の補正点
-    //   X100.  Z-459.18   — φ100 Z平行区間
+    //   X98.143 Z-457.934 — R9.2とR1.3の接点（B点）
+    //   X100.  Z-459.18   — φ100 Z平行区間（R1.3終端、C点）
     //
     // 相対ΔZ（照合に使用）:
-    //   ΔZ(φ85→X98.143) = 8.816mm
-    //   ΔZ(φ85→φ100)    = 10.062mm
+    //   ΔZ(φ85→B点) = 8.816mm
+    //   ΔZ(φ85→C点) = 10.062mm
     //
-    // 図面R値（変更禁止）: R0.5, R1.3, R8, R9.2
+    // 図面R値: R0.5, R1.3, R8, R9.2
     // 工具: R0.8 TEX12-dII, tip#3, right-hand
     //
     // ================================================================
-    // プロファイル解釈:
-    //   面(φ120→φ85) → φ85 Z平行 → テーパー(φ85→φ100)遷移域 → φ100 Z平行 → 行止まり面
+    // 手書き計算の幾何学的解析（工場長のネタ帳「段差よりも小さい円弧から円弧」）:
     //
-    // 幾何学的コーナータイプ（shape_matrix.test.ts G-03/G-04準拠）:
-    //   P3: φ85 Z-par → テーパー開始 → 左折 = kaku-r（凸角）
-    //   P4: テーパーキンク           → 左折 = kaku-r（凸角）
-    //   P5: テーパー → φ100 Z-par   → 右折 = sumi-r（凹角）
-    //   P6: φ100 Z-par → 行止まり面 → 左折 = kaku-r（凸角）
+    // プロファイル: 面(φ120→φ85) → φ85 Z平行 → 段差面(φ85→φ100) → φ100 Z平行 → 行止まり
     //
-    // R値配置:
-    //   P3: kaku-r R8   — テーパー開始
-    //   P4: kaku-r R9.2 — テーパーキンク
-    //   P5: sumi-r R1.3 — テーパー→φ100遷移
-    //   P6: kaku-r R0.5 — 行止まり端
+    // 段差 = (100 - 85) / 2 = 7.5mm（半径）
+    // R9.2 > 段差(7.5) なので「段差がR分よりも小さい場合」に該当
+    // R9.2（主円弧）+ R1.3（副円弧）の二円弧遷移で接続
     //
-    // ================================================================
-    // auto-shrink（R値自動縮小）について:
-    //   R8@P3: φ85 Z平行セグメント長(0.3mm) < R8の接線距離 → 自動縮小
-    //   R9.2@P4: P4→P5セグメント長(≈3mm) < R9.2の接線距離 → 自動縮小
-    //   R0.5@P6: φ100 Z平行セグメント長(1.5mm) < R0.5接線距離は問題ないが
-    //            隣接セグメント制約で一部縮小
+    // ■ 公式による検証:
+    //   oe = R9.2 + R1.3 = 10.5
+    //   of = R9.2 - (段差 - R1.3) = 9.2 - (7.5 - 1.3) = 3.0
+    //   ef = √(oe² - of²) = √(10.5² - 3.0²) = √101.25 = 10.062
+    //   → ΔZ(A→C) = ef = 10.062mm ✓ 完全一致
     //
-    //   R8/R9.2はφ85→φ100の15mm径差（7.5mm半径差）内では幾何学的に
-    //   フルサイズで収まらない。auto-shrinkは計算機の正当な動作。
-    //   入力R値は図面値そのままを使用し、一切変更していない。
+    //   θ = atan(of/ef) = atan(3.0/10.062) = 16.599°
+    //   cd = R9.2 × cos(θ) = 9.2 × cos(16.599°) = 8.816
+    //   → ΔZ(A→B) = cd = 8.816mm ✓ 完全一致
     //
-    //   R1.3はauto-shrinkなし（100%保存）。
+    //   db = R9.2 - R9.2 × sin(θ) = 9.2 × (1 - sin(16.599°)) = 6.571
+    //   B_X = 85 + 2 × db = 85 + 13.143 = 98.143
+    //   → X = 98.143mm ✓ 完全一致
     //
-    // ================================================================
-    // 探索手法:
-    //   スキャンD〜L（10+パターン × 数千パラメータ組合せ）で以下を探索:
-    //   - 3/4コーナー構造、R値配置6パターン
-    //   - R8面コーナー（P2）配置
-    //   - 単純テーパー（R8/R9.2なし）
-    //   - x4(テーパーキンク径)を90〜99まで0.5刻み
-    //   - z3/z4/z5/z6を0.1〜0.5刻みで精密探索
-    //   最善スコア: 0.196（下記構成）
+    // R8 は別の特徴（面コーナー等）または計算メモ参照値
     // ================================================================
 
-    it('ステップアッププロファイル: 形状計算と補正座標の照合', () => {
-        // 最善構成: z3=0.3, x4=94, z4=9, z5=9.5, z6=11.0
+    it('隣接sumi-r（R9.2+R1.3）二円弧遷移: 素材座標の照合', () => {
+        // 正しいモデル: φ85 Z-par → 段差面 → φ100 Z-par
+        // P3(sumi-r 9.2) + P4(sumi-r 1.3) の隣接コーナーで二円弧遷移（S字接続）が発動
+        // R9.2 > 段差(7.5mm半径) なので、個別計算では auto-shrink される
+        // adjacentCorners のS字公式が「段差よりも小さい円弧から円弧」の公式と完全一致
+        //
+        // P3のZ座標は任意（φ85 Z-par長さ）。A点のZ位置は自動計算される。
+        // ここではZ=-12とし、R9.2のtDist(9.2) < l1(12) を確保。
         const shape = {
             points: [
                 createPoint(120, 0, noCorner()),                                    // P1: 面始点
                 createPoint(85, 0, noCorner()),                                     // P2: 面端（φ85）
-                createPoint(85, -0.3, { type: 'kaku-r' as const, size: 8 }),       // P3: φ85 Z-par端 → テーパー
-                createPoint(94, -9, { type: 'kaku-r' as const, size: 9.2 }),       // P4: テーパーキンク
-                createPoint(100, -9.5, { type: 'sumi-r' as const, size: 1.3 }),    // P5: テーパー→φ100
-                createPoint(100, -11, { type: 'kaku-r' as const, size: 0.5 }),     // P6: 行止まり端
-                createPoint(120, -11, noCorner()),                                  // P7: 行止まり面端
+                createPoint(85, -12, { type: 'sumi-r' as const, size: 9.2 }),      // P3: φ85 Z-par端（R9.2主円弧）
+                createPoint(100, -12, { type: 'sumi-r' as const, size: 1.3 }),     // P4: 段差面端（R1.3副円弧）
+                createPoint(100, -15, { type: 'kaku-r' as const, size: 0.5 }),     // P5: 行止まりR
+                createPoint(120, -15, noCorner()),                                  // P6: 面端
             ]
         }
 
         const result = calculateShape(shape, settingsR08)
         expect(result.segments.length).toBeGreaterThan(0)
 
-        // comp (x,z) ペア抽出
-        const pairs = result.segments.flatMap(s => {
-            const c = s.compensated
-            if (!c) return []
-            return [{ x: c.startX, z: c.startZ }, { x: c.endX, z: c.endZ }]
+        // セグメント構造をダンプ
+        console.log('\n=== IMG_1388 隣接sumi-r 二円弧遷移 ===')
+        result.segments.forEach((seg, i) => {
+            const label = `[${i+1}] ${seg.type}${seg.radius ? ` R${seg.radius}` : ''}${seg.isConvex !== undefined ? (seg.isConvex ? ' 凸' : ' 凹') : ''}`
+            console.log(`  ${label}: X${seg.startX}→X${seg.endX} Z${seg.startZ}→Z${seg.endZ}`)
         })
 
-        // target X に最も近いペアを取得
-        const findClosestX = (targetX: number) =>
-            pairs.reduce((best, p) => Math.abs(p.x - targetX) < Math.abs(best.x - targetX) ? p : best, pairs[0])
-        // deep Z (< -1) のみから target X に最も近いペアを取得
-        const findClosestXDeep = (targetX: number) =>
-            pairs.filter(p => p.z < -1).reduce((best, p) => Math.abs(p.x - targetX) < Math.abs(best.x - targetX) ? p : best, pairs[0])
+        // R9.2 と R1.3 の二つの円弧セグメントが生成されるはず
+        const arcSegments = result.segments.filter(s => s.type === 'corner-r')
+        expect(arcSegments.length).toBeGreaterThanOrEqual(2)
 
-        const pt85 = findClosestX(85)
-        const pt98 = findClosestX(98.143)
-        const pt100 = findClosestXDeep(100)
+        // R9.2 円弧（第1弧）: A点(φ85 Z-par上) → B点(接点)
+        const arc1 = arcSegments.find(s => s.radius === 9.2)
+        expect(arc1).toBeDefined()
+        expect(arc1!.startX).toBeCloseTo(85, 2)           // A点: φ85上
+        expect(arc1!.exitX || arc1!.endX).toBeDefined()
 
-        // --- 補正座標の照合 ---
+        // R1.3 円弧（第2弧）: B点(接点) → C点(φ100 Z-par上)
+        const arc2 = arcSegments.find(s => s.radius === 1.3)
+        expect(arc2).toBeDefined()
+        expect(arc2!.endX).toBeCloseTo(100, 2)            // C点: φ100上
 
-        // X85: Z平行セグメントの補正X（ノーズR相殺で素材Xと一致）
-        expect(pt85.x).toBeCloseTo(85, 0)
+        // B点（R9.2とR1.3の接点）の X 座標
+        expect(arc1!.endX).toBeCloseTo(98.143, 2)
 
-        // X98.143: テーパー遷移域の補正X
-        // 計算値 X98.077 vs 手書き X98.143 → Δ0.066mm
-        expect(pt98.x).toBeCloseTo(98.143, 0)
+        // ΔZ検証
+        const aZ = arc1!.startZ                            // A点のZ
+        const bZ = arc1!.endZ                              // B点のZ（= arc2の始点Z）
+        const cZ = arc2!.endZ                              // C点のZ
 
-        // X100: φ100 Z平行セグメントの補正X
-        expect(pt100.x).toBeCloseTo(100, 0)
+        const dzAB = Math.abs(bZ - aZ)                    // ΔZ(A→B)
+        const dzAC = Math.abs(cZ - aZ)                    // ΔZ(A→C)
 
-        // ΔZ(φ85→X98): 手書き 8.816mm
-        const dz98 = Math.abs(pt98.z - pt85.z)
-        // 計算値 8.704 vs 手書き 8.816 → Δ0.112mm
-        expect(dz98).toBeCloseTo(8.816, 0)
+        console.log(`  A=(${arc1!.startX}, ${aZ}), B=(${arc1!.endX}, ${bZ}), C=(${arc2!.endX}, ${cZ})`)
+        console.log(`  ΔZ(A→B) = ${dzAB.toFixed(3)} (expected: 8.816)`)
+        console.log(`  ΔZ(A→C) = ${dzAC.toFixed(3)} (expected: 10.062)`)
 
-        // ΔZ(φ85→φ100): 手書き 10.062mm
-        const dz100 = Math.abs(pt100.z - pt85.z)
-        // 計算値 10.080 vs 手書き 10.062 → Δ0.018mm（優秀な一致）
-        expect(dz100).toBeCloseTo(10.062, 0)
+        // 公式値との照合（小数3桁）
+        expect(arc1!.endX).toBeCloseTo(98.143, 2)         // B点 X = 98.143
+        expect(dzAB).toBeCloseTo(8.816, 2)                // ΔZ(A→B) = 8.816
+        expect(dzAC).toBeCloseTo(10.062, 2)               // ΔZ(A→C) = 10.062
 
-        // --- R値保存の確認 ---
-        // R1.3（sumi-r）はauto-shrinkなしで100%保存されることを確認
-        const outputRs = result.segments.filter(s => s.radius && s.radius > 0).map(s => s.radius!)
-        const r13 = outputRs.find(r => Math.abs(r - 1.3) < 0.01)
-        expect(r13).toBeDefined()
-        expect(r13).toBeCloseTo(1.3, 2)
+        // R値がauto-shrinkされていないことを確認
+        expect(arc1!.radius).toBe(9.2)
+        expect(arc2!.radius).toBe(1.3)
 
-        // --- 入力R値が変更されていないことの確認 ---
-        // （形状定義で図面値 R0.5, R1.3, R8, R9.2 を使用）
-        expect(shape.points[2].corner.size).toBe(8)     // R8
-        expect(shape.points[3].corner.size).toBe(9.2)   // R9.2
-        expect(shape.points[4].corner.size).toBe(1.3)   // R1.3
-        expect(shape.points[5].corner.size).toBe(0.5)   // R0.5
+        // 警告なし
+        expect(result.warnings?.length ?? 0).toBe(0)
     })
 })

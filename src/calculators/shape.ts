@@ -1055,9 +1055,15 @@ function calculateAdjacentCorners(p1: Point, p2: Point, p3: Point, p4: Point): a
         const x3 = p3.x / 2 + n3.x * s3 * R2
 
         const h = Math.abs(x3 - x1)
-        // Mazatrol的なS字自動計算は、頂点間が「ほぼ同一」とみなせる極小距離の場合のみ発動させる
-        // ユーザー報告の R6 + R0.5 (l2=5.0) のようなケースは、絶対に個別計算（独立R）に任せる
-        if (h < targetDist * 0.95 && l2 < 0.1) {
+        // S字自動計算の発動条件:
+        // (1) 頂点間がほぼ同一（l2 < 0.1）— 従来のMazatrol的S字
+        // (2) 同タイプの隣接R（両方sumi-rまたは両方kaku-r）で、Rが段差を超えている
+        //     — 「段差がR分よりも小さい場合」の二円弧遷移（工場長のネタ帳公式）
+        //     個別計算では auto-shrink が発生し、図面のR値を保てない
+        //     混合タイプ（sumi-r + kaku-r）は独立コーナーとして個別計算に任せる
+        const sameCornerType = p2.corner.type === p3.corner.type
+        const rExceedsGap = sameCornerType && (R1 >= l2 * 0.99 || R2 >= l2 * 0.99)
+        if (h < targetDist * 0.95 && (l2 < 0.1 || rExceedsGap)) {
             const dz_total = Math.sqrt(Math.max(0, targetDist * targetDist - h * h))
 
             // Zの配分 (半径比)
