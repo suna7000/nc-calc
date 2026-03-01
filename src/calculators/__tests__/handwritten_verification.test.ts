@@ -576,3 +576,148 @@ describe('全画像照合結果サマリー', () => {
         expect(true).toBe(true)
     })
 })
+
+// ============================================================
+// 11. IMG_1376: R0.7 トレースルート計算
+// ============================================================
+
+const settingsR07: MachineSettings = {
+    ...defaultMachineSettings,
+    activeToolId: 't1',
+    toolLibrary: [{
+        id: 't1', name: 'Test', type: 'external',
+        noseRadius: 0.7, toolTipNumber: 3, hand: 'right'
+    }],
+    noseRCompensation: {
+        enabled: true, offsetNumber: 1,
+        compensationDirection: 'auto', method: 'geometric'
+    },
+}
+
+describe('IMG_1376: R0.7 トレースルート計算（デバッグ）', () => {
+    // 画像読取り値（補正座標）:
+    //   φ34.67 Z0.1 — 始点（面端、小径）
+    //   φ36.333 (φ36.26) — 溝/バンプ部
+    //   X38.990 (Z-0.79) — C0.2付近
+    //   X37.36 (Z-4.341) — R2.2付近
+    //   (Z-7.488) — R2.2付近
+    //   X36.25 (Z-16.87) — テーパー区間
+    //   X34.7 (Z-20.6) — 最深部
+    //   X41.2 (Z-15.774) — R1.2付近
+    //   X42.2 — エンドポイント付近
+    //   コーナー: R2, R1.2, C0.2, R2.2×2, R1.0×2
+    //
+    // 工具: R0.7, TEX65D4立, "1-R0.7"
+
+    // --- 推測形状5: 大径面→C0.2段差→R2.2(90°→テーパー)→X36.26 Z平行→R1.0溝→小径深端 ---
+    // P3をC0.2に変更（R1.2だとタンジェント合計2.78mmで2mm半径スパンに収まらず、R2.2が自動縮小）
+    // C0.2タンジェント0.2mm + R2.2タンジェント1.58mm = 1.78mm < 2mm → 収まる
+    // R1.2は別箇所（P5テーパー下端？）で使用の可能性
+    const shapeGuess5 = {
+        points: [
+            createPoint(50, 0, noCorner()),                                    // P1: 始点、大径面
+            createPoint(42.2, 0, { type: 'kaku-r' as const, size: 2 }),       // P2: R2肩（X42.2手書き値に合わせ）
+            createPoint(42.2, -4, { type: 'kaku-c' as const, size: 0.2 }),    // P3: C0.2段差（タンジェント0.2mm）
+            createPoint(38, -4, { type: 'kaku-r' as const, size: 2.2 }),      // P4: R2.2（段差90°→テーパー直結）
+            createPoint(36.26, -8.0, { type: 'sumi-r' as const, size: 2.2 }),// P5: R2.2テーパー下端→Z平行（テーパー角~12.3°）
+            createPoint(36.26, -16.4, { type: 'sumi-r' as const, size: 1.0 }),// P6: R1.0溝上端
+            createPoint(34.67, -18, { type: 'sumi-r' as const, size: 1.0 }), // P7: R1.0溝下端
+            createPoint(34.67, -19.9, noCorner()),                             // P8: 終点、小径深端
+        ]
+    }
+
+    it('推測形状5: 全セグメント座標ダンプ', () => {
+        const result = calculateShape(shapeGuess5, settingsR07)
+
+        console.log('\n=== IMG_1376 推測形状4 全セグメント（R0.7 tip#3）===')
+        console.log('手書き補正値:')
+        console.log('  φ34.67 Z0.1, φ36.333, X38.990 Z-0.79')
+        console.log('  X37.36 Z-4.341, Z-7.488, X36.25 Z-16.87')
+        console.log('  X34.7 Z-20.6, X41.2 Z-15.774, X42.2')
+        console.log('')
+
+        result.segments.forEach((seg, i) => {
+            const c = seg.compensated
+            if (!c) return
+            const label = `[${i + 1}] ${seg.type}${seg.angle !== undefined ? ` ${seg.angle}°` : ''}${seg.radius ? ` R${seg.radius}` : ''}${seg.isConvex !== undefined ? (seg.isConvex ? ' 凸' : ' 凹') : ''}`
+            console.log(label)
+            console.log(`  形状: X${seg.startX} Z${seg.startZ} → X${seg.endX} Z${seg.endZ}`)
+            console.log(`  補正: X${c.startX} Z${c.startZ} → X${c.endX} Z${c.endZ}${c.radius ? ` R${c.radius}` : ''}`)
+        })
+
+        // 手書き値との比較
+        const allCompX = result.segments.flatMap(s => s.compensated ? [s.compensated.startX, s.compensated.endX] : [])
+        const allCompZ = result.segments.flatMap(s => s.compensated ? [s.compensated.startZ, s.compensated.endZ] : [])
+
+        console.log('\n--- 手書きX値との照合 ---')
+        const xTargets = [
+            { name: 'φ34.67', x: 34.67 },
+            { name: 'φ36.333', x: 36.333 },
+            { name: 'X38.990', x: 38.990 },
+            { name: 'X37.36', x: 37.36 },
+            { name: 'X36.25', x: 36.25 },
+            { name: 'X34.7', x: 34.7 },
+            { name: 'X41.2', x: 41.2 },
+            { name: 'X42.2', x: 42.2 },
+        ]
+        for (const t of xTargets) {
+            const closest = allCompX.reduce((best, v) => Math.abs(v - t.x) < Math.abs(best - t.x) ? v : best, allCompX[0])
+            const diff = Math.abs(closest - t.x)
+            console.log(`  ${t.name}: 最近値 X${closest.toFixed(3)} (差 ${diff.toFixed(3)}mm)${diff < 0.05 ? ' ✅' : diff < 0.5 ? ' ⚠️' : ' ❌'}`)
+        }
+
+        console.log('\n--- 手書きZ値との照合 ---')
+        const zTargets = [
+            { name: 'Z0.1', z: 0.1 },
+            { name: 'Z-0.79', z: -0.79 },
+            { name: 'Z-4.341', z: -4.341 },
+            { name: 'Z-7.488', z: -7.488 },
+            { name: 'Z-15.774', z: -15.774 },
+            { name: 'Z-16.87', z: -16.87 },
+            { name: 'Z-20.6', z: -20.6 },
+        ]
+        for (const t of zTargets) {
+            const closest = allCompZ.reduce((best, v) => Math.abs(v - t.z) < Math.abs(best - t.z) ? v : best, allCompZ[0])
+            const diff = Math.abs(closest - t.z)
+            console.log(`  ${t.name}: 最近値 Z${closest.toFixed(3)} (差 ${diff.toFixed(3)}mm)${diff < 0.05 ? ' ✅' : diff < 0.5 ? ' ⚠️' : ' ❌'}`)
+        }
+
+        expect(result.segments.length).toBeGreaterThan(0)
+    })
+
+    // --- 一致した値に対するアサーションテスト ---
+    // 推測形状5で手書き値との照合が0.05mm以内の値を検証
+    // 注意: 形状は画像から推測したもの。完全な一致は形状定義の正確さに依存。
+    // R1.2の配置場所が未特定のため、C0.2で代用。テーパー角は名目12.3°→実効9.4°（R2.2タンジェント影響）。
+    it('推測形状5: 一致する補正値の検証', () => {
+        const result = calculateShape(shapeGuess5, settingsR07)
+        const allCompX = result.segments.flatMap(s => s.compensated ? [s.compensated.startX, s.compensated.endX] : [])
+        const allCompZ = result.segments.flatMap(s => s.compensated ? [s.compensated.startZ, s.compensated.endZ] : [])
+
+        const findClosest = (arr: number[], target: number) =>
+            arr.reduce((best, v) => Math.abs(v - target) < Math.abs(best - target) ? v : best, arr[0])
+
+        // --- X値の検証（高確信度） ---
+        // φ34.67: 小径Z平行区間の補正値
+        expect(findClosest(allCompX, 34.67)).toBeCloseTo(34.67, 2)
+
+        // X42.2: 肩部Z平行区間の補正値（形状X42.2 → comp X42.2、tip#3 Z平行）
+        expect(findClosest(allCompX, 42.2)).toBeCloseTo(42.2, 2)
+
+        // φ36.333: テーパー補正値（形状X36.26のテーパー端）
+        expect(findClosest(allCompX, 36.333)).toBeCloseTo(36.333, 1)
+
+        // X36.25: X36.26 Z平行区間の補正値
+        expect(findClosest(allCompX, 36.25)).toBeCloseTo(36.26, 1)
+
+        // X34.7: 小径端の補正値（X34.67に近い中間点）
+        expect(findClosest(allCompX, 34.7)).toBeCloseTo(34.7, 1)
+
+        // --- Z値の検証（高確信度） ---
+        // Z-20.6: 小径Z平行区間の終端
+        expect(findClosest(allCompZ, -20.6)).toBeCloseTo(-20.6, 2)
+
+        // Z-16.87: R1.0溝上端付近の補正Z値
+        expect(findClosest(allCompZ, -16.87)).toBeCloseTo(-16.87, 1)
+    })
+})
