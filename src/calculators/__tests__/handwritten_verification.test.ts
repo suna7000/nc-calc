@@ -721,3 +721,100 @@ describe('IMG_1376: R0.7 トレースルート計算（デバッグ）', () => {
         expect(findClosest(allCompZ, -16.87)).toBeCloseTo(-16.87, 1)
     })
 })
+
+// ============================================================
+// 12. IMG_1388: R0.8 ステップアッププロファイル計算
+// ============================================================
+// settingsR08 はファイル冒頭で定義済み（tip#3, R0.8, right-hand）
+
+describe('IMG_1388: R0.8 ステップアッププロファイル', () => {
+    // 画像読取り値（補正座標、機械座標系Z）:
+    //   X85.   Z-449.118  — φ85 Z平行区間
+    //   X98.143 Z-457.934 — S字カーブ R9.2 kaku-r 変曲点
+    //   X100.  Z-459.18   — φ100 Z平行区間
+    //   ΔZ: φ85→X98.143 = 8.816mm, φ85→φ100 = 10.062mm
+    //
+    // コーナー: R1.3(sumi), R9.2(kaku), R1.3(sumi), C0.5
+    // 工具: R0.8, TEX12-dII, tip#3, right-hand
+    //
+    // プロファイル: φ85(面端)→R1.3sumi→テーパー1(急)→R9.2kaku(φ97)→テーパー2(緩)→R1.3sumi→φ100→C0.5→行止まり
+    //
+    // 反復フィッティング結果（8a構成、score=0.036）:
+    //   X98.143: 計算値98.158 (差0.015mm)
+    //   ΔZ(φ85→X98): 計算値8.802 (差0.014mm)
+    //   ΔZ(φ85→φ100): 計算値10.069 (差0.007mm)
+
+    const shape1388 = {
+        points: [
+            createPoint(120, 0, noCorner()),                                     // P1: 始点、面
+            createPoint(85, 0, noCorner()),                                      // P2: 面端
+            createPoint(85, -1, { type: 'sumi-r' as const, size: 1.3 }),        // P3: R1.3 sumi φ85→テーパー1
+            createPoint(97, -9.4, { type: 'kaku-r' as const, size: 9.2 }),      // P4: R9.2 kaku S字変曲点
+            createPoint(100, -9.6, { type: 'sumi-r' as const, size: 1.3 }),     // P5: R1.3 sumi テーパー2→φ100
+            createPoint(100, -11.7, { type: 'kaku-c' as const, size: 0.5 }),    // P6: C0.5 面取り 行止まり
+            createPoint(120, -11.7, noCorner()),                                 // P7: 終点
+        ]
+    }
+
+    // Helper: find closest (x,z) pair to target X
+    const findClosestX = (pairs: {x: number, z: number}[], targetX: number) =>
+        pairs.reduce((best, p) => Math.abs(p.x - targetX) < Math.abs(best.x - targetX) ? p : best, pairs[0])
+
+    // Helper: find closest (x,z) pair to target X among deep Z values
+    const findClosestXDeep = (pairs: {x: number, z: number}[], targetX: number) =>
+        pairs.filter(p => p.z < -1).reduce((best, p) => Math.abs(p.x - targetX) < Math.abs(best.x - targetX) ? p : best, pairs[0])
+
+    it('全セグメント座標ダンプ', () => {
+        const result = calculateShape(shape1388, settingsR08)
+
+        console.log('\n=== IMG_1388 最終形状 全セグメント（R0.8 tip#3）===')
+        result.segments.forEach((seg, i) => {
+            const c = seg.compensated
+            if (!c) return
+            const label = `[${i + 1}] ${seg.type}${seg.angle !== undefined ? ` ${seg.angle}°` : ''}${seg.radius ? ` R${seg.radius}` : ''}${seg.isConvex !== undefined ? (seg.isConvex ? ' 凸' : ' 凹') : ''}`
+            console.log(label)
+            console.log(`  形状: X${seg.startX} Z${seg.startZ} → X${seg.endX} Z${seg.endZ}`)
+            console.log(`  補正: X${c.startX} Z${c.startZ} → X${c.endX} Z${c.endZ}${c.radius ? ` R${c.radius}` : ''}`)
+        })
+
+        expect(result.segments.length).toBeGreaterThan(0)
+    })
+
+    it('手書き補正値との照合（ΔZ基準）', () => {
+        const result = calculateShape(shape1388, settingsR08)
+
+        const segPairs = result.segments.flatMap(s => {
+            const c = s.compensated
+            if (!c) return []
+            return [{ x: c.startX, z: c.startZ }, { x: c.endX, z: c.endZ }]
+        })
+
+        const pt85 = findClosestX(segPairs, 85)
+        const pt98 = findClosestX(segPairs, 98.143)
+        const pt100 = findClosestXDeep(segPairs, 100)
+
+        // X値の照合
+        // X85: φ85 Z平行区間の補正X（完全一致）
+        expect(pt85.x).toBeCloseTo(85, 1)
+
+        // X98.143: R9.2 kaku-r 変曲点の補正X
+        // 手書き: 98.143, 計算値: 98.158 (差0.015mm)
+        // 注: R9.2 は R3.456 に自動縮小（comp R=4.256）
+        expect(pt98.x).toBeCloseTo(98.143, 1)
+
+        // X100: φ100 Z平行区間の補正X（完全一致）
+        expect(pt100.x).toBeCloseTo(100, 1)
+
+        // Z値はΔZ（差分）で比較（機械座標の絶対値は不明のため）
+        const dz_85_98 = Math.abs(pt98.z - pt85.z)
+        const dz_85_100 = Math.abs(pt100.z - pt85.z)
+
+        // ΔZ(φ85→X98.143) = 8.816mm
+        // 計算値: 8.802mm (差0.014mm)
+        expect(dz_85_98).toBeCloseTo(8.816, 1)
+
+        // ΔZ(φ85→φ100) = 10.062mm
+        // 計算値: 10.069mm (差0.007mm)
+        expect(dz_85_100).toBeCloseTo(10.062, 1)
+    })
+})
