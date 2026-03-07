@@ -8,7 +8,8 @@
 // sumi-r: 隅R（内角のR）
 // kaku-r: 角R（外角のR）
 // kaku-c: 角C（外角の面取り）
-export type CornerType = 'none' | 'sumi-r' | 'kaku-r' | 'kaku-c'
+// nusumi: 盗み（R逃がし：垂直落とし＋R弧戻り）
+export type CornerType = 'none' | 'sumi-r' | 'kaku-r' | 'kaku-c' | 'nusumi'
 
 // 溝挿入情報（この点の後に溝を入れる）
 export interface GrooveInsert {
@@ -23,7 +24,8 @@ export interface GrooveInsert {
 // 隅処理情報
 export interface CornerTreatment {
     type: CornerType
-    size: number  // RまたはCのサイズ
+    size: number  // RまたはCのサイズ（盗みの場合: 戻りR値）
+    depth?: number  // 盗み専用: 落とし深さ（半径値, mm）
     // 連続R（2つ目の円弧）- 円弧→円弧の接続用
     secondArc?: {
         type: CornerType  // 'sumi-r' | 'kaku-r' のみ有効
@@ -143,6 +145,11 @@ export function kakuR(size: number): CornerTreatment {
 // 角C処理を作成（面取り）
 export function kakuC(size: number): CornerTreatment {
     return { type: 'kaku-c', size }
+}
+
+// 盗み処理を作成（R逃がし）
+export function nusumi(radius: number, depth: number): CornerTreatment {
+    return { type: 'nusumi', size: radius, depth }
 }
 
 // 後方互換性のためのエイリアス

@@ -47,6 +47,9 @@ export function ShapeBuilder() {
     // 点編集モード
     const [editingPointIndex, setEditingPointIndex] = useState<number | null>(null)
 
+    // 盗み（ヌスミ）深さ
+    const [nusumiDepth, setNusumiDepth] = useState('')
+
     // 逃し（リトラクト）
     const [startRetract, setStartRetract] = useState('')
     const [endRetract, setEndRetract] = useState('')
@@ -162,6 +165,9 @@ export function ShapeBuilder() {
                 corner = { type: 'kaku-r', size }
             } else if (cornerType === 'kaku-c') {
                 corner = { type: 'kaku-c', size }
+            } else if (cornerType === 'nusumi') {
+                const depthVal = parseFloat(nusumiDepth)
+                corner = { type: 'nusumi', size, depth: depthVal > 0 ? depthVal : undefined }
             }
 
             // 連続Rの処理
@@ -195,6 +201,7 @@ export function ShapeBuilder() {
         setIsAngleMode(false)
         setCornerType('none')
         setCornerSize('')
+        setNusumiDepth('')
         setHasSecondArc(false)
         setSecondArcType('kaku-r')
         setSecondArcSize('')
@@ -216,6 +223,7 @@ export function ShapeBuilder() {
         setInputZ(point.z.toString())
         setCornerType(point.corner.type)
         setCornerSize(point.corner.size > 0 ? point.corner.size.toString() : '')
+        setNusumiDepth(point.corner.depth ? point.corner.depth.toString() : '')
         setHasSecondArc(!!point.corner.secondArc)
         if (point.corner.secondArc) {
             setSecondArcType(point.corner.secondArc.type)
@@ -249,6 +257,9 @@ export function ShapeBuilder() {
                 corner = { type: 'kaku-r', size }
             } else if (cornerType === 'kaku-c') {
                 corner = { type: 'kaku-c', size }
+            } else if (cornerType === 'nusumi') {
+                const depthVal = parseFloat(nusumiDepth)
+                corner = { type: 'nusumi', size, depth: depthVal > 0 ? depthVal : undefined }
             }
             if (hasSecondArc && (cornerType === 'sumi-r' || cornerType === 'kaku-r')) {
                 const secondSize = parseFloat(secondArcSize)
@@ -275,6 +286,7 @@ export function ShapeBuilder() {
         setInputZ('')
         setCornerType('none')
         setCornerSize('')
+        setNusumiDepth('')
         setHasSecondArc(false)
         setSecondArcType('kaku-r')
         setSecondArcSize('')
@@ -343,6 +355,7 @@ export function ShapeBuilder() {
         setInputZ(removedPoint.z.toString())
         setCornerType(removedPoint.corner.type)
         setCornerSize(removedPoint.corner.size > 0 ? removedPoint.corner.size.toString() : '')
+        setNusumiDepth(removedPoint.corner.depth ? removedPoint.corner.depth.toString() : '')
 
         setShape({ points: shape.points.slice(0, -1) })
         setShowResults(false)
@@ -803,18 +816,39 @@ export function ShapeBuilder() {
                         >
                             角C
                         </button>
+                        <button
+                            className={`type-btn ${cornerType === 'nusumi' ? 'active' : ''}`}
+                            onClick={() => setCornerType('nusumi')}
+                        >
+                            盗み
+                        </button>
                     </div>
 
                     {cornerType !== 'none' && (
                         <div className="extra-input">
-                            <label>{cornerType === 'kaku-c' ? 'C値' : 'R値'}</label>
+                            <label>{cornerType === 'kaku-c' ? 'C値' : cornerType === 'nusumi' ? '戻りR' : 'R値'}</label>
                             <input
                                 type="number"
                                 className="step-input small"
                                 value={cornerSize}
                                 onChange={(e) => setCornerSize(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                placeholder={cornerType === 'kaku-c' ? 'C2' : 'R5'}
+                                placeholder={cornerType === 'kaku-c' ? 'C2' : cornerType === 'nusumi' ? 'R10' : 'R5'}
+                            />
+                        </div>
+                    )}
+
+                    {cornerType === 'nusumi' && (
+                        <div className="extra-input">
+                            <label>深さ（片側）</label>
+                            <input
+                                type="number"
+                                className="step-input small"
+                                value={nusumiDepth}
+                                onChange={(e) => setNusumiDepth(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                placeholder="0.2"
+                                step="0.1"
                             />
                         </div>
                     )}
@@ -1002,7 +1036,8 @@ export function ShapeBuilder() {
                                 <span className="corner-badge">
                                     {point.corner.type === 'sumi-r' ? `隅R${point.corner.size}`
                                         : point.corner.type === 'kaku-r' ? `角R${point.corner.size}`
-                                            : `角C${point.corner.size}`}
+                                            : point.corner.type === 'nusumi' ? `盗R${point.corner.size} 深${point.corner.depth ?? ''}`
+                                                : `角C${point.corner.size}`}
                                 </span>
                             )}
                             {point.groove && (

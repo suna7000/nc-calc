@@ -4,6 +4,7 @@
  */
 
 import type { Shape, Point, CornerCalculation, GrooveInsert } from '../models/shape'
+import { createPoint, noCorner } from '../models/shape'
 import type { MachineSettings } from '../models/settings'
 import { defaultMachineSettings } from '../models/settings'
 import {
@@ -139,10 +140,13 @@ export function calculateShape(
 
     const warnings: string[] = []
 
+    // 盗み（ヌスミ）コーナー展開（前処理）
+    const nusumiExpanded = expandNusumiCorners(shape.points)
+
     // 始点逃し: 形状修正方式（前処理）
     const workingPoints = (shape.retract?.start && shape.retract.start > 0)
-        ? applyStartRetract(shape.points, shape.retract.start)
-        : shape.points
+        ? applyStartRetract(nusumiExpanded, shape.retract.start)
+        : nusumiExpanded
 
     let currentX = workingPoints[0].x
     let currentZ = workingPoints[0].z
@@ -398,18 +402,77 @@ export function calculateShape(
                 i += 1
             }
         } else {
-            results.push({
-                index: results.length + 1,
-                type: 'line',
-                startX: currentX,
-                startZ: currentZ,
-                endX: nextPoint.x,
-                endZ: nextPoint.z,
-                angle: calculateAngle(currentX, currentZ, nextPoint.x, nextPoint.z)
-            })
-            currentX = nextPoint.x
-            currentZ = nextPoint.z
-            i += 1
+            if (nextPoint.type === 'arc' && nextPoint.arcRadius && nextPoint.arcRadius > 0) {
+                // 独立した円弧要素（盗み展開の弧など）
+                const r = nextPoint.arcRadius
+                const isConvex = nextPoint.isConvex !== false
+
+                const dx = (nextPoint.x - currentX) / 2
+                const dz = nextPoint.z - currentZ
+                const dist = Math.sqrt(dx * dx + dz * dz)
+
+                if (dist > 0 && dist <= r * 2) {
+                    const h = Math.sqrt(Math.max(0, r * r - (dist / 2) * (dist / 2)))
+                    const midX = (currentX + nextPoint.x) / 2
+                    const midZ = (currentZ + nextPoint.z) / 2
+
+                    let nx = -dz / dist
+                    let nz = dx / dist
+
+                    const sideSign = machineSettings.toolPost === 'rear' ? -1 : 1
+                    const direction = (isConvex ? -1 : 1) * sideSign
+
+                    const centerX = midX + nx * h * direction * 2
+                    const centerZ = midZ + nz * h * direction
+
+                    results.push({
+                        index: results.length + 1,
+                        type: 'corner-r',
+                        startX: currentX,
+                        startZ: currentZ,
+                        endX: nextPoint.x,
+                        endZ: nextPoint.z,
+                        centerX,
+                        centerZ,
+                        i: round3(centerX - currentX / 2),
+                        k: round3(centerZ - currentZ),
+                        radius: r,
+                        isConvex,
+                        gCode: isConvex ? 'G02' : 'G03',
+                        sweep: isConvex ? 0 : 1
+                    })
+                    currentX = nextPoint.x
+                    currentZ = nextPoint.z
+                    i += 1
+                } else {
+                    // dist が範囲外の場合はラインとして処理
+                    results.push({
+                        index: results.length + 1,
+                        type: 'line',
+                        startX: currentX,
+                        startZ: currentZ,
+                        endX: nextPoint.x,
+                        endZ: nextPoint.z,
+                        angle: calculateAngle(currentX, currentZ, nextPoint.x, nextPoint.z)
+                    })
+                    currentX = nextPoint.x
+                    currentZ = nextPoint.z
+                    i += 1
+                }
+            } else {
+                results.push({
+                    index: results.length + 1,
+                    type: 'line',
+                    startX: currentX,
+                    startZ: currentZ,
+                    endX: nextPoint.x,
+                    endZ: nextPoint.z,
+                    angle: calculateAngle(currentX, currentZ, nextPoint.x, nextPoint.z)
+                })
+                currentX = nextPoint.x
+                currentZ = nextPoint.z
+                i += 1
+            }
         }
 
         // この点に溝がある場合、溝を展開
@@ -488,6 +551,57 @@ export function calculateShape(
     }
 
     return { segments: results, warnings }
+}
+
+/**
+ * 盗み（ヌスミ）コーナーを展開（前処理）
+ * corner.type === 'nusumi' の点を、落とし線＋R弧戻りの2-3点に展開
+ * 幾何学: 垂直落とし（X方向）→ 凹R弧で元の径に戻る
+ */
+function expandNusumiCorners(points: Point[]): Point[] {
+    const result: Point[] = []
+    for (let i = 0; i < points.length; i++) {
+        const p = points[i]
+        if (p.corner.type !== 'nusumi' || !p.corner.depth || p.corner.depth <= 0) {
+            result.push(p)
+            continue
+        }
+
+        const depth = p.corner.depth
+        const R = p.corner.size
+
+        // バリデーション: R > depth でなければ円弧が成立しない
+        if (R <= depth) {
+            result.push({ ...p, corner: noCorner() })
+            continue
+        }
+
+        // Z方向: 前の点との進行方向から決定
+        const prevZ = i > 0 ? points[i - 1].z : p.z
+        const zSign = p.z <= prevZ ? -1 : 1
+
+        // X方向: 常にX減少方向（径が小さくなる方向）に落とす
+        // 前の点より小径側に進んでいれば-1、大径側なら+1
+        const prevX = i > 0 ? points[i - 1].x : p.x
+        const xSign = p.x <= prevX ? -1 : 1
+
+        // 1. 元の点（コーナーなし）
+        result.push({ ...p, corner: noCorner() })
+
+        // 2. 落とし点（垂直ドロップ）
+        const dropX = round3(p.x + xSign * depth * 2)
+        const dropPoint = createPoint(dropX, p.z, 'line')
+        result.push(dropPoint)
+
+        // 3. 円弧戻り点
+        const deltaZ = Math.sqrt(R * R - (R - depth) * (R - depth))
+        const arcEndZ = round3(p.z + zSign * deltaZ)
+        const arcPoint = createPoint(p.x, arcEndZ, 'arc')
+        arcPoint.arcRadius = R
+        arcPoint.isConvex = false
+        result.push(arcPoint)
+    }
+    return result
 }
 
 /**
