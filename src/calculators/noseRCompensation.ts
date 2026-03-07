@@ -83,16 +83,16 @@ function calculateDzFromBisector(
     const dzSign = [0, -1, +1, +1, -1]
     const sign = dzSign[tipNumber] || +1
 
+    // bzThreshold = 0.01: 倍精度浮動小数点 + 正規化誤差マージン
+    const bzThreshold = 0.01
+    const bzAbs = Math.abs(bisec.bz)
+
     // ルール2: 凹円弧は常にオフセット必要（Phase 2 で判明した制約）
     if (isConvex === false) {
         return noseR * sign
     }
 
     // ルール3: 凸円弧 or 直線: bzで判定
-    // bzThreshold = 0.01: 倍精度浮動小数点 + 正規化誤差マージン
-    const bzThreshold = 0.01
-    const bzAbs = Math.abs(bisec.bz)
-
     if (bzAbs < bzThreshold) {
         return 0  // 法線が水平 → 追加Z方向オフセット不要
     } else {
@@ -362,7 +362,14 @@ export class CenterTrackCalculator {
             if (!(seg.isConvex ?? true)) { nx = -nx; nz = -nz }
         } else {
             const dx = (seg.endX - seg.startX) / 2, dz = seg.endZ - seg.startZ
-            nx = -dz; nz = dx
+            if (Math.abs(dz) < 1e-6 && dx < -1e-6) {
+                // 内向き端面(face cut, dx<0): 左垂直(-dz,dx)が-Z方向を指し、誤り
+                // 材料は-Z側にあるため、法線は+Z方向が正しい
+                nx = 0
+                nz = 1
+            } else {
+                nx = -dz; nz = dx
+            }
         }
         const len = Math.sqrt(nx * nx + nz * nz)
         if (len < 1e-9) return { nx: 0, nz: 0 }

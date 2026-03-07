@@ -52,9 +52,9 @@ describe('Nusumi Geometry Verification (11deg Taper + 0.4mm Undercut + R10)', ()
         expect(result[0].compensatedEndZ).toBeCloseTo(-13.222, 3)
 
         // 2. ぬすみ落ちの終点 - 水平線とR10の接続
-        // 注: 隅R進入点調整により値が変更されました
-        expect(result[1].compensatedEndX).toBeCloseTo(94.004, 3)
-        expect(result[1].compensatedEndZ).toBeCloseTo(-13.523, 3)
+        // 内向き端面法線修正後: (0,-1)→(0,+1)でbisector方向が変更
+        expect(result[1].compensatedEndX).toBeCloseTo(94.094, 3)
+        expect(result[1].compensatedEndZ).toBeCloseTo(-12.861, 3)
 
         // 3. R10の終点 (プロファイル末端)
         expect(result[2].compensatedEndX).toBeCloseTo(94.992, 3)
