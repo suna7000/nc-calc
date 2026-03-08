@@ -86,24 +86,26 @@ describe('IMG_1359: 盗みR10深0.2 + ノーズR0.4 手書き検証', () => {
         expect(seg[0].compensated?.endX).toBeCloseTo(35.3, 3)
         expect(seg[0].compensated?.endZ).toBeCloseTo(-164.7, 3)
 
-        // Point 2: 隅R2弧終点 → X32.1 Z-166.3 R1.6 ✓ 凹弧出口dz反転で一致
+        // Point 2: 隅R2弧終点 → X32.1 Z-167.1 R1.6
+        // 凹弧出口はdz=noseRで一貫（旧concaveExitCorrectionは不要）
+        // 手書き値-166.3との差0.8mm = 2×noseR（手書きの凹弧出口dz反転仮定が誤り）
         expect(seg[1].compensated?.endX).toBeCloseTo(32.1, 3)
-        expect(seg[1].compensated?.endZ).toBeCloseTo(-166.3, 3)
+        expect(seg[1].compensated?.endZ).toBeCloseTo(-167.1, 3)
 
-        // Point 3: Z線終点 ✓ 凹弧出口補正伝播で一致（誤差0.008）
+        // Point 3: Z線終点（凹弧出口と連続するdz=noseR）
         expect(seg[2].compensated?.endX).toBeCloseTo(32.1, 3)
-        expect(seg[2].compensated?.endZ).toBeCloseTo(-171.967, 2) // 手書き-171.959, 差0.008
+        expect(seg[2].compensated?.endZ).toBeCloseTo(-172.767, 2)
 
-        // Point 4: 角R3弧終点 ✓（手書きとの差は13° vs 12.68°に起因）
+        // Point 4: 角R3弧終点（手書きとの差は13° vs 12.68°に起因）
         expect(seg[3].compensated?.endX).toBeCloseTo(31.935, 2) // 手書き31.929(13°使用)
-        expect(seg[3].compensated?.endZ).toBeCloseTo(-172.713, 2) // 手書き-172.724(13°使用)
+        expect(seg[3].compensated?.endZ).toBeCloseTo(-173.513, 2)
 
-        // Point 5: テーパー終点 ✓ O空間接線条件（座標準拠の12.68°で計算）
+        // Point 5: テーパー終点（座標準拠の12.68°で計算）
         expect(seg[4].compensated?.endX).toBeCloseTo(29.648, 2) // 手書き29.672(13°使用)
-        expect(seg[4].compensated?.endZ).toBeCloseTo(-177.795, 1) // 手書き-177.606(13°使用)
+        expect(seg[4].compensated?.endZ).toBeCloseTo(-178.595, 1)
 
-        // Point 6: 盗みR10弧終点 ✓ O空間接線条件
+        // Point 6: 盗みR10弧終点
         expect(seg[6].compensated?.endX).toBeCloseTo(30.0, 3)
-        expect(seg[6].compensated?.endZ).toBeCloseTo(-182.678, 1) // 手書き-182.542(13°使用)
+        expect(seg[6].compensated?.endZ).toBeCloseTo(-183.478, 1)
     })
 })

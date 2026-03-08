@@ -6,17 +6,17 @@ import { defaultMachineSettings, type MachineSettings } from '../../models/setti
 /**
  * 6点形状: NCプログラム出力値との照合
  *
- * NCプログラム出力（実機値）との差異を記録。
- * ノード単位dz修正により角R系のdz不連続(0.4mm=noseR)は解消済み。
+ * 修正履歴:
+ *   1. nodeIsConvex[]導入: 角R系dz不連続(0.4mm)解消
+ *   2. shape.ts p2AdjustedZ除去: 隅R弧の二重補正解消
+ *   3. concaveExitCorrection除去: 不要な2×noseR補正削除
+ *   4. テーパー→凹弧bisectorフォールスルー: テーパー終点Z修正
  *
  * 完全一致:
- *   N15 Z, N25 R, N85 Z, N95 Z
+ *   N15 Z, N25 X/Z/R, N35 X/Z, N45 Z, N85 Z, N95 Z
  *
  * 残存誤差:
- *   角R0.5 endX: 0.079mm
- *   角R0.5 endZ: 0.040mm
- *   隅R1 endZ: 0.674mm（shape.tsのコーナー弧ジオメトリに起因）
- *   隅R2 endZ: 0.137mm
+ *   隅R2 endZ: 0.137mm（N65）
  */
 describe('NCプログラム出力との照合（6点形状）', () => {
     const settings: MachineSettings = {
@@ -78,18 +78,16 @@ describe('NCプログラム出力との照合（6点形状）', () => {
         const last = result.segments[result.segments.length - 1]
         expect(last.compensated?.endZ).toBeCloseTo(nc.n95.z, 2) // N95 Z ✓
 
-        // === 残存誤差のあるポイント ===
-        // 角R0.5 endX: コード65.552 vs NC65.473（差0.079mm）
-        expect(kakuR05?.compensated?.endX).toBeCloseTo(nc.n25.x, 0)
-        // 角R0.5 endZ: コード-115.789 vs NC-115.829（差0.040mm）
-        expect(kakuR05?.compensated?.endZ).toBeCloseTo(nc.n25.z, 1)
+        // 角R0.5 endX/endZ: 完全一致 ✓
+        expect(kakuR05?.compensated?.endX).toBeCloseTo(nc.n25.x, 2) // N25 X ✓
+        expect(kakuR05?.compensated?.endZ).toBeCloseTo(nc.n25.z, 2) // N25 Z ✓
 
         // 隅R2 endZ: コード-169.670 vs NC-169.533（差0.137mm）
         const sumiR2 = result.segments.find(s => s.type === 'corner-r' && !s.isConvex && s.radius === 2)
         expect(sumiR2?.compensated?.endZ).toBeCloseTo(nc.n65.z, 0)
 
-        // 隅R1 endZ: コード-117.988 vs NC-117.314（差0.674mm）← shape.ts弧ジオメトリに起因
+        // 隅R1 endZ: shape.ts p2AdjustedZ除去 + bisectorフォールスルーで完全一致 ✓
         const sumiR1 = result.segments.find(s => s.type === 'corner-r' && !s.isConvex && s.radius === 1)
-        expect(sumiR1?.compensated?.endZ).toBeCloseTo(-117.988, 2)
+        expect(sumiR1?.compensated?.endZ).toBeCloseTo(nc.n45.z, 2) // N45 Z ✓
     })
 })

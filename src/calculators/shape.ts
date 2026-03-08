@@ -935,32 +935,8 @@ function calculateCorner(p1: Point, p2: Point, p3: Point, _prevSegmentAngle?: nu
     // ワーク形状そのものを計算（ノーズR補正なし）
     const adjustedSize = originalSize
 
-    // 隅R（凹円弧）への進入時、p1→p2の方向がテーパーの場合は特殊な進入点計算
-    let p2AdjustedZ = p2.z
-    if (p2.corner.type === 'sumi-r') {
-        // p1→p2の方向から角度を計算
-        const dx = (p2.x - p1.x) / 2  // 半径ベース
-        const dz = p2.z - p1.z
-        const len = Math.sqrt(dx * dx + dz * dz)
-        if (len > 0.001) {  // ほぼゼロでない場合
-            const angleRad = Math.atan2(Math.abs(dx), Math.abs(dz))
-            const angleDeg = angleRad * 180 / Math.PI
-
-            // テーパー角度（0度より大きく90度未満）の場合に調整
-            if (angleDeg > 0.1 && angleDeg < 89.9) {
-                // 手書き計算に基づく隅R進入点の調整
-                // fz = R_nose × (1 + tan(θ/2))
-                // ΔZ = fz × tan(θ/2)
-                // 進入点Z = 元のZ - fz - ΔZ
-                // Note: この計算はノーズR=0.4mmを仮定
-                const noseR = 0.4  // TODO: 外部から取得すべき
-                const halfAngleRad = angleRad / 2
-                const fz = noseR * (1 + Math.tan(halfAngleRad))
-                const deltaZ = fz * Math.tan(halfAngleRad)
-                p2AdjustedZ = p2.z - fz - deltaZ
-            }
-        }
-    }
+    // 隅Rのコーナー座標は図面値のまま使用（ノーズR補正はnoseRCompensation.tsで適用）
+    const p2AdjustedZ = p2.z
 
 
     const v1x = (p1.x - p2.x) / 2, v1z = p1.z - p2AdjustedZ
@@ -1047,9 +1023,7 @@ function calculateCorner(p1: Point, p2: Point, p3: Point, _prevSegmentAngle?: nu
     // Standard Entry/Exit Calculation
     // Use `let` to allow clipping modification
     let eX = p2.x / 2 + u1x * tDist_in
-    // 隅R進入点調整が適用されている場合は、entryZを直接p2AdjustedZに設定
-    const wasAdjusted = (p2.corner.type === 'sumi-r' && p2AdjustedZ !== p2.z)
-    let eZ = wasAdjusted ? p2AdjustedZ : (manualEntryZ !== null ? manualEntryZ : p2AdjustedZ + u1z * tDist_in)
+    let eZ = manualEntryZ !== null ? manualEntryZ : (p2AdjustedZ + u1z * tDist_in)
     let xX = p2.x / 2 + u2x * tDist_out
     let xZ = p2AdjustedZ + u2z * tDist_out
 
