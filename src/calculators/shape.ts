@@ -357,10 +357,9 @@ export function calculateShape(
                         let nx = -dz / dist
                         let nz = dx / dist
 
-                        // 凸凹と切削方向（sideSign）によって中心を選択
-                        // 外径加工(sideSign=1)で凸なら中心は内側
-                        const sideSign = machineSettings.toolPost === 'rear' ? -1 : 1
-                        const direction = (isConvex ? -1 : 1) * sideSign
+                        // 凸凹で中心を選択（弧中心は幾何学的位置のためtoolPost非依存）
+                        // 凸: 中心は弦の右側（内側）、凹: 中心は弦の左側（外側）
+                        const direction = isConvex ? -1 : 1
 
                         const centerX = midX + nx * h * direction * 2 // 直径値なので2倍
                         const centerZ = midZ + nz * h * direction
@@ -419,8 +418,8 @@ export function calculateShape(
                     let nx = -dz / dist
                     let nz = dx / dist
 
-                    const sideSign = machineSettings.toolPost === 'rear' ? -1 : 1
-                    const direction = (isConvex ? -1 : 1) * sideSign
+                    // 弧中心は幾何学的位置のためtoolPost非依存
+                    const direction = isConvex ? -1 : 1
 
                     const centerX = midX + nx * h * direction * 2
                     const centerZ = midZ + nz * h * direction

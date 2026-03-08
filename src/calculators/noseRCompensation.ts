@@ -204,7 +204,10 @@ export class CenterTrackCalculator {
             const isPrevTaper = prevSeg && this.isTaper(prevSeg)
             const isNextTaper = nextSeg && this.isTaper(nextSeg)
 
-            if (isPrevTaper && i < profile.length) {
+            // テーパー→端面(90°)遷移はbisector法のほうが正確
+            // fz公式はテーパー→Z線(0°)遷移用のため
+            const isNextFace = nextSeg && nextSeg.angle === 90
+            if (isPrevTaper && i < profile.length && !isNextFace) {
                 // テーパー終点：fz公式 + 次セグメント法線でX計算
                 const taperAngle = prevSeg!.angle!
                 const taperAngleRad = taperAngle * Math.PI / 180
@@ -262,7 +265,17 @@ export class CenterTrackCalculator {
                 if (i === 0) {
                     n = this.getNormalAt(profile[0], 'start')
                 } else if (i === profile.length) {
-                    n = this.getNormalAt(profile[profile.length - 1], 'end')
+                    const lastSeg = profile[profile.length - 1]
+                    const lastN = this.getNormalAt(lastSeg, 'end')
+                    // 凹弧（盗み弧）終端: 暗黙的Z線が続くとしてbisector計算
+                    // 盗み弧の戻り点ではZ線法線(+X,0)との交点が正しいP座標
+                    if (lastSeg.type === 'corner-r' && lastSeg.isConvex === false) {
+                        const zLineN = { nx: 1 * this.sideSign, nz: 0 }
+                        bisec = this.calculateBisector(lastN, zLineN)
+                        n = { nx: bisec.bx * (bisec.dist / this.noseR), nz: bisec.bz * (bisec.dist / this.noseR) }
+                    } else {
+                        n = lastN
+                    }
                 } else {
                     const n1 = this.getNormalAt(profile[i - 1], 'end')
                     const n2 = this.getNormalAt(profile[i], 'start')
@@ -313,12 +326,11 @@ export class CenterTrackCalculator {
             let startO = pToO(sNode.x * 2, sNode.z, this.noseR, this.toolType, startParam)
             let endO = pToO(eNode.x * 2, eNode.z, this.noseR, this.toolType, endParam)
 
-            // 前の凹弧出口補正を直後のLINEに1回だけ適用（直線長を保持）
-            if (concaveExitOffset !== 0 && seg.type === 'line') {
+            // 凹弧出口補正を後続の全セグメントに伝播（Zベースラインシフト）
+            if (concaveExitOffset !== 0) {
                 startO = { ox: startO.ox, oz: round3(startO.oz + concaveExitOffset) }
                 endO = { ox: endO.ox, oz: round3(endO.oz + concaveExitOffset) }
             }
-            concaveExitOffset = 0  // 適用後は常にリセット
 
             // 凹弧(sumi-R)終点の補正:
             // O座標系で弧が隣接セグメントと接線連続になるには、
@@ -334,7 +346,7 @@ export class CenterTrackCalculator {
                 if (centerDir !== 0 && centerDir !== sign && sweepRatio > 0.5) {
                     const correction = 2 * this.noseR * sign
                     endO = { ox: endO.ox, oz: round3(endO.oz + correction) }
-                    concaveExitOffset = correction  // 直後のLINEに1回だけ伝播
+                    concaveExitOffset += correction  // 後続全セグメントに伝播
                 }
             }
 
