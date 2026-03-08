@@ -53,11 +53,10 @@ function round3(v: number): number {
  *    - |bz| < threshold → dz=0 （法線が水平）
  *    - |bz| ≥ threshold → dz=noseR×sign
  *
- * @param bisec - bisector計算結果 { bz: number, ... }
+ * @param bisec - bisector計算結果 { bz: number }
  * @param noseR - ノーズ半径
  * @param tipNumber - 工具チップ番号 (1-4, 8)
  * @param isConvex - 凹円弧判定（false=凹円弧、true=凸円弧 or 直線）
- *                   暫定: Phase 2 互換ガード、将来的には bisec のみに統一予定
  * @returns dz - Z方向オフセット量
  */
 function calculateDzFromBisector(
@@ -307,7 +306,22 @@ export class CenterTrackCalculator {
                     : endIsConvex
 
             const startO = pToO(sNode.x * 2, sNode.z, this.noseR, this.toolType, startParam)
-            const endO = pToO(eNode.x * 2, eNode.z, this.noseR, this.toolType, endParam)
+            let endO = pToO(eNode.x * 2, eNode.z, this.noseR, this.toolType, endParam)
+
+            // 凹弧(sumi-R)終点の補正:
+            // O座標系で弧が隣接セグメントと接線連続になるには、
+            // 弧中心のZ方向がV_offset方向と逆の場合のみdz反転が必要。
+            // 例: 端面→隅R→Z線（下方向）: center below entry → 補正要
+            //     端面→隅R→Z線（上方向）: center above entry → 補正不要
+            const isConcaveArc = seg.type === 'corner-r' && seg.isConvex === false
+            if (isConcaveArc && seg.centerZ !== undefined) {
+                const dzSign = [0, -1, +1, +1, -1]
+                const sign = dzSign[this.toolType] || +1
+                const centerDir = Math.sign(seg.centerZ - seg.startZ)
+                if (centerDir !== 0 && centerDir !== sign) {
+                    endO = { ox: endO.ox, oz: round3(endO.oz + 2 * this.noseR * sign) }
+                }
+            }
 
             let cR = seg.radius
             let cCX = seg.centerX
@@ -316,9 +330,21 @@ export class CenterTrackCalculator {
             if (seg.type === 'corner-r' && seg.radius !== undefined && seg.centerX !== undefined && seg.centerZ !== undefined) {
                 const isConvex = seg.isConvex !== false
                 cR = isConvex ? (seg.radius + this.noseR) : Math.abs(seg.radius - this.noseR)
-                const centerProg = pToO(seg.centerX, seg.centerZ, this.noseR, this.toolType, isConvex)
-                cCX = centerProg.ox
-                cCZ = centerProg.oz
+                if (isConcaveArc && seg.centerZ !== undefined) {
+                    // 凹弧の中心: 中心方向がV_offset逆の場合のみ補正
+                    const centerO = pToO(seg.centerX, seg.centerZ, this.noseR, this.toolType, false)
+                    const dzSign2 = [0, -1, +1, +1, -1]
+                    const sign2 = dzSign2[this.toolType] || +1
+                    const centerDir2 = Math.sign(seg.centerZ - seg.startZ)
+                    cCX = centerO.ox
+                    cCZ = (centerDir2 !== 0 && centerDir2 !== sign2)
+                        ? round3(centerO.oz + 2 * this.noseR * sign2)
+                        : centerO.oz
+                } else {
+                    const centerProg = pToO(seg.centerX, seg.centerZ, this.noseR, this.toolType, isConvex)
+                    cCX = centerProg.ox
+                    cCZ = centerProg.oz
+                }
             }
 
             result.push({

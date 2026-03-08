@@ -83,17 +83,16 @@ describe('IMG_1359: 盗みR10深0.2 + ノーズR0.4 手書き検証', () => {
         expect(seg[0].compensated?.endX).toBeCloseTo(35.3, 3)
         expect(seg[0].compensated?.endZ).toBeCloseTo(-164.7, 3)
 
-        // Point 2: 隅R2弧終点 → X32.1 Z-166.3 R1.6
-        // 既知の差異: 実出力 Z-167.1 (手書き Z-166.3, 差 0.8=2R)
-        // 隅R弧EXIT点でのdz符号がENTRY点と区別できず、未解決
+        // Point 2: 隅R2弧終点 → X32.1 Z-166.3 R1.6 ✓ 凹弧出口dz反転で一致
         expect(seg[1].compensated?.endX).toBeCloseTo(32.1, 3)
-        expect(seg[1].compensated?.endZ).toBeCloseTo(-167.1, 1)  // TODO: -166.3に修正
+        expect(seg[1].compensated?.endZ).toBeCloseTo(-166.3, 3)
 
-        // Point 3〜6: Point 2の累積誤差により省略
-        // 参考実出力:
+        // Point 3〜6: 残存差分あり（凹弧補正はPoint2のみ直接影響）
+        // 参考実出力（Point 2修正後）:
         //   Point 3: X32.1 Z-172.767 (手書き Z-171.959, 差 -0.808)
+        //     → seg[2]のstartZは-167.1のまま（LINE seg、凹弧補正非対象）
         //   Point 4: X31.935 Z-173.381 (手書き X31.929 Z-172.724)
         //   Point 5: X28.78 Z-178.656 (手書き X29.672 Z-177.606)
-        //   Point 6: X28.4 Z-181.534 (手書き X30.0 Z-182.542)
+        //   Point 6: X28.4 Z-180.734 (手書き X30.0 Z-182.542)
     })
 })
