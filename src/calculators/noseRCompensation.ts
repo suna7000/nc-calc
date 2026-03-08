@@ -278,6 +278,11 @@ export class CenterTrackCalculator {
         }
 
         const result: CompensatedSegment[] = []
+        // 凹弧出口補正の伝播: 凹弧終点でdz反転が発生した場合、
+        // 後続の直線セグメント（isConvex=false, bz≈0）にも同じ補正を伝播。
+        // テーパー公式ノードまたは凸弧で吸収される。
+        let concaveExitOffset = 0
+
         for (let i = 0; i < profile.length; i++) {
             const seg = profile[i]
             const sNode = nodes[i], eNode = nodes[i + 1]
@@ -305,21 +310,31 @@ export class CenterTrackCalculator {
                     ? { bisec: eNode.bisec, isConvex: endIsConvex }
                     : endIsConvex
 
-            const startO = pToO(sNode.x * 2, sNode.z, this.noseR, this.toolType, startParam)
+            let startO = pToO(sNode.x * 2, sNode.z, this.noseR, this.toolType, startParam)
             let endO = pToO(eNode.x * 2, eNode.z, this.noseR, this.toolType, endParam)
+
+            // 前の凹弧出口補正を直後のLINEに1回だけ適用（直線長を保持）
+            if (concaveExitOffset !== 0 && seg.type === 'line') {
+                startO = { ox: startO.ox, oz: round3(startO.oz + concaveExitOffset) }
+                endO = { ox: endO.ox, oz: round3(endO.oz + concaveExitOffset) }
+            }
+            concaveExitOffset = 0  // 適用後は常にリセット
 
             // 凹弧(sumi-R)終点の補正:
             // O座標系で弧が隣接セグメントと接線連続になるには、
             // 弧中心のZ方向がV_offset方向と逆の場合のみdz反転が必要。
-            // 例: 端面→隅R→Z線（下方向）: center below entry → 補正要
-            //     端面→隅R→Z線（上方向）: center above entry → 補正不要
             const isConcaveArc = seg.type === 'corner-r' && seg.isConvex === false
-            if (isConcaveArc && seg.centerZ !== undefined) {
+            if (isConcaveArc && seg.centerZ !== undefined && seg.radius !== undefined) {
                 const dzSign = [0, -1, +1, +1, -1]
                 const sign = dzSign[this.toolType] || +1
                 const centerDir = Math.sign(seg.centerZ - seg.startZ)
-                if (centerDir !== 0 && centerDir !== sign) {
-                    endO = { ox: endO.ox, oz: round3(endO.oz + 2 * this.noseR * sign) }
+                // 弧の掃引角が大きい（≈90°）場合のみ補正。
+                // |centerZ - startZ| / R ≈ 1.0 → 90°コーナー、≈ 0 → 浅角コーナー。
+                const sweepRatio = Math.abs(seg.centerZ - seg.startZ) / seg.radius
+                if (centerDir !== 0 && centerDir !== sign && sweepRatio > 0.5) {
+                    const correction = 2 * this.noseR * sign
+                    endO = { ox: endO.ox, oz: round3(endO.oz + correction) }
+                    concaveExitOffset = correction  // 直後のLINEに1回だけ伝播
                 }
             }
 
@@ -330,14 +345,15 @@ export class CenterTrackCalculator {
             if (seg.type === 'corner-r' && seg.radius !== undefined && seg.centerX !== undefined && seg.centerZ !== undefined) {
                 const isConvex = seg.isConvex !== false
                 cR = isConvex ? (seg.radius + this.noseR) : Math.abs(seg.radius - this.noseR)
-                if (isConcaveArc && seg.centerZ !== undefined) {
-                    // 凹弧の中心: 中心方向がV_offset逆の場合のみ補正
+                if (isConcaveArc && seg.centerZ !== undefined && seg.radius !== undefined) {
+                    // 凹弧の中心: 90°近傍かつ中心方向がV_offset逆の場合のみ補正
                     const centerO = pToO(seg.centerX, seg.centerZ, this.noseR, this.toolType, false)
                     const dzSign2 = [0, -1, +1, +1, -1]
                     const sign2 = dzSign2[this.toolType] || +1
                     const centerDir2 = Math.sign(seg.centerZ - seg.startZ)
+                    const sweepRatio2 = Math.abs(seg.centerZ - seg.startZ) / seg.radius
                     cCX = centerO.ox
-                    cCZ = (centerDir2 !== 0 && centerDir2 !== sign2)
+                    cCZ = (centerDir2 !== 0 && centerDir2 !== sign2 && sweepRatio2 > 0.5)
                         ? round3(centerO.oz + 2 * this.noseR * sign2)
                         : centerO.oz
                 } else {
