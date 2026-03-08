@@ -95,13 +95,14 @@ describe('IMG_1359: 盗みR10深0.2 + ノーズR0.4 手書き検証', () => {
         expect(seg[3].compensated?.endX).toBeCloseTo(31.935, 2) // 手書きX31.929, 差0.006
         expect(seg[3].compensated?.endZ).toBeCloseTo(-172.713, 2) // 手書きZ-172.724, 差0.011
 
-        // Point 5: テーパー終点 ✓ bisector法+スパイクガード緩和で改善
-        expect(seg[4].compensated?.endX).toBeCloseTo(29.78, 2) // 手書きX29.672, 差0.108
-        expect(seg[4].compensated?.endZ).toBeCloseTo(-177.5, 1) // 手書きZ-177.606, 差0.106
+        // Point 5: テーパー終点 ✓ O空間接線条件でX大幅改善（誤差X:0.024, Z:0.189）
+        // Z誤差0.189: 入力座標から算出した角度(12.68°)と図面指定角度(13°)の差に起因
+        expect(seg[4].compensated?.endX).toBeCloseTo(29.648, 2) // 手書きX29.672, 差0.024
+        expect(seg[4].compensated?.endZ).toBeCloseTo(-177.795, 1) // 手書きZ-177.606, 差0.189
 
-        // Point 6: 盗みR10弧終点 ✓ arc center修正でX一致
+        // Point 6: 盗みR10弧終点 ✓ O空間接線条件で大幅改善（誤差Z:0.136）
         expect(seg[6].compensated?.endX).toBeCloseTo(30.0, 3)  // 手書きX30.0, 完全一致
-        expect(seg[6].compensated?.endZ).toBeCloseTo(-180.676, 1) // 手書きZ-182.542, 差1.866
-        // Z差1.866: 凹弧O座標空間での弧幾何計算がbisector法と異なる構造的問題
+        expect(seg[6].compensated?.endZ).toBeCloseTo(-182.678, 1) // 手書きZ-182.542, 差0.136
+        // 残存誤差0.136: テーパー角度差(12.68° vs 13°)が弧中心Zに伝播
     })
 })

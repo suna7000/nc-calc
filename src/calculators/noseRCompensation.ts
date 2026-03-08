@@ -387,7 +387,96 @@ export class CenterTrackCalculator {
                 compensatedK: (seg.type === 'corner-r' && cCZ !== undefined) ? round3(cCZ - startO.oz) : undefined
             })
         }
+        // Post-process: テーパー→face→凹弧パターンに接線条件を適用。
+        // V_offset変換は剛体変換ではなく、テーパー上の点と弧中心の変換量が異なるため
+        // 接線条件が壊れる。補正弧R_compとテーパー角から直接O座標を導出して修正。
+        for (let i = 0; i < result.length - 2; i++) {
+            const seg = profile[i]
+            if (!this.isTaper(seg)) continue
+
+            const faceSeg = profile[i + 1]
+            const arcSeg = profile[i + 2]
+            if (!faceSeg || faceSeg.angle !== 90) continue
+            if (!arcSeg || arcSeg.type !== 'corner-r' || arcSeg.isConvex !== false) continue
+            if (!arcSeg.radius || arcSeg.radius <= this.noseR) continue
+
+            const tangentO = this.computeTaperArcTangentO(
+                seg.angle!,
+                arcSeg.radius - this.noseR,
+                faceSeg.endX,
+                { ox: result[i].compensatedStartX, oz: result[i].compensatedStartZ },
+                arcSeg.endX
+            )
+            if (!tangentO) continue
+
+            // テーパー終点を上書き
+            result[i].compensatedEndX = tangentO.taperEndO.ox
+            result[i].compensatedEndZ = tangentO.taperEndO.oz
+            // face始点を連続に
+            result[i + 1].compensatedStartX = tangentO.taperEndO.ox
+            result[i + 1].compensatedStartZ = tangentO.taperEndO.oz
+            // 弧終点・中心・半径を上書き
+            result[i + 2].compensatedEndX = tangentO.arcEndO.ox
+            result[i + 2].compensatedEndZ = tangentO.arcEndO.oz
+            result[i + 2].compensatedCenterX = round3(tangentO.arcCenterO.ox)
+            result[i + 2].compensatedCenterZ = round3(tangentO.arcCenterO.oz)
+            result[i + 2].compensatedRadius = round3(arcSeg.radius - this.noseR)
+            result[i + 2].compensatedI = round3((tangentO.arcCenterO.ox - result[i + 2].compensatedStartX) / 2)
+            result[i + 2].compensatedK = round3(tangentO.arcCenterO.oz - result[i + 2].compensatedStartZ)
+        }
+
         return result
+    }
+
+    /**
+     * テーパー→凹弧の接線条件からO座標を直接計算。
+     *
+     * 手書き計算の方法: 補正弧R_comp（= R - noseR）に対するテーパー接線点と
+     * 弧の幾何学的関係からO座標を導出する。
+     *
+     * 核心公式: X_tangent = drop_X + 2 × R_comp × (1 - cos(θ))
+     * 証明: center_X_O = drop_X + 2R - 2noseR = drop_X + 2×R_comp
+     *       X_tangent_O = center_X_O - 2×R_comp×cos(θ) = drop_X + 2×R_comp×(1-cos(θ))
+     */
+    private computeTaperArcTangentO(
+        taperAngle: number,
+        rComp: number,
+        dropX: number,
+        taperStartO: { ox: number, oz: number },
+        arcEndX: number
+    ): { taperEndO: { ox: number, oz: number }, arcCenterO: { ox: number, oz: number }, arcEndO: { ox: number, oz: number } } | null {
+        const thetaRad = taperAngle * Math.PI / 180
+        if (thetaRad <= 0 || thetaRad >= Math.PI / 2) return null
+        if (rComp <= 0) return null
+
+        // テーパー接線点X（O座標）
+        const tangentX = round3(dropX + 2 * rComp * (1 - Math.cos(thetaRad)))
+
+        // テーパーのO空間走行距離からZ計算
+        const deltaXr = (taperStartO.ox - tangentX) / 2
+        if (deltaXr <= 0) return null  // テーパーが逆方向
+        const deltaZ = deltaXr / Math.tan(thetaRad)
+        const tangentZ = round3(taperStartO.oz - deltaZ)
+
+        // 弧中心（O座標）
+        const centerXr = dropX / 2 + rComp
+        const centerX = round3(centerXr * 2)
+        const dxCenterTangent = centerXr - tangentX / 2
+        const dzSq = rComp * rComp - dxCenterTangent * dxCenterTangent
+        if (dzSq < 0) return null
+        const centerZ = round3(tangentZ - Math.sqrt(dzSq))
+
+        // 弧終点Z（O座標）
+        const dxEndpoint = centerXr - arcEndX / 2
+        const dzEndSq = rComp * rComp - dxEndpoint * dxEndpoint
+        if (dzEndSq < 0) return null
+        const arcEndZ = round3(centerZ - Math.sqrt(dzEndSq))
+
+        return {
+            taperEndO: { ox: tangentX, oz: tangentZ },
+            arcCenterO: { ox: centerX, oz: centerZ },
+            arcEndO: { ox: round3(arcEndX), oz: arcEndZ }
+        }
     }
 
     private calculateBisector(n1: { nx: number, nz: number }, n2: { nx: number, nz: number }): { dist: number, bx: number, bz: number } {
