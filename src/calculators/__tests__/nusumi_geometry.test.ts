@@ -46,9 +46,9 @@ describe('Nusumi Geometry Verification (11deg Taper + 0.4mm Undercut + R10)', ()
         })
 
         // 1. 11度テーパーの終点 - テーパー→端面(90°)遷移はbisector法使用
-        // bisector法: テーパー法線と端面法線の交点をP座標として計算
-        expect(result[0].compensatedEndX).toBeCloseTo(94.817, 3)
-        expect(result[0].compensatedEndZ).toBeCloseTo(-13.007, 3)
+        // bisector法: テーパー法線と端面法線のオフセット線交点(dist=R/cos(α/2))
+        expect(result[0].compensatedEndX).toBeCloseTo(95.17, 2)
+        expect(result[0].compensatedEndZ).toBeCloseTo(-12.861, 2)
 
         // 2. ぬすみ落ちの終点 - 水平線とR10の接続
         // 内向き端面法線修正後: (0,-1)→(0,+1)でbisector方向が変更

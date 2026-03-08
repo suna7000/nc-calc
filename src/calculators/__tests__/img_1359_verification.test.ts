@@ -91,13 +91,13 @@ describe('IMG_1359: 盗みR10深0.2 + ノーズR0.4 手書き検証', () => {
         expect(seg[2].compensated?.endX).toBeCloseTo(32.1, 3)
         expect(seg[2].compensated?.endZ).toBeCloseTo(-171.967, 2) // 手書き-171.959, 差0.008
 
-        // Point 4: 角R3弧終点 ✓ 伝播拡張で改善（誤差Z:0.143, X:0.006）
+        // Point 4: 角R3弧終点 ✓ bisector法で大幅改善（誤差Z:0.011, X:0.006）
         expect(seg[3].compensated?.endX).toBeCloseTo(31.935, 2) // 手書きX31.929, 差0.006
-        expect(seg[3].compensated?.endZ).toBeCloseTo(-172.581, 1) // 手書きZ-172.724, 差0.143
+        expect(seg[3].compensated?.endZ).toBeCloseTo(-172.713, 2) // 手書きZ-172.724, 差0.011
 
-        // Point 5: テーパー終点 ✓ bisector法で大幅改善
-        expect(seg[4].compensated?.endX).toBeCloseTo(29.405, 2) // 手書きX29.672, 差0.267
-        expect(seg[4].compensated?.endZ).toBeCloseTo(-177.65, 1) // 手書きZ-177.606, 差0.044
+        // Point 5: テーパー終点 ✓ bisector法+スパイクガード緩和で改善
+        expect(seg[4].compensated?.endX).toBeCloseTo(29.78, 2) // 手書きX29.672, 差0.108
+        expect(seg[4].compensated?.endZ).toBeCloseTo(-177.5, 1) // 手書きZ-177.606, 差0.106
 
         // Point 6: 盗みR10弧終点 ✓ arc center修正でX一致
         expect(seg[6].compensated?.endX).toBeCloseTo(30.0, 3)  // 手書きX30.0, 完全一致

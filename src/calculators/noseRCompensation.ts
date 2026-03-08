@@ -234,7 +234,9 @@ export class CenterTrackCalculator {
 
                 // テーパー公式使用フラグをセット
                 nodes.push({ x: px, z: pz, n, bisec: undefined, usedTaperFormula: true })
-            } else if (isNextTaper && i > 0) {
+            // 前セグメントが凸弧（角R）の場合、弧出口はテーパーと接線連続。
+            // bisector法（法線一致→単純オフセット）のほうがfz公式より正確。
+            } else if (isNextTaper && i > 0 && !(prevSeg!.type === 'corner-r' && prevSeg!.isConvex !== false)) {
                 // テーパー始点：fz公式 + 前セグメント法線でX計算
                 const taperAngle = nextSeg!.angle!
                 const taperAngleRad = taperAngle * Math.PI / 180
@@ -325,7 +327,6 @@ export class CenterTrackCalculator {
 
             let startO = pToO(sNode.x * 2, sNode.z, this.noseR, this.toolType, startParam)
             let endO = pToO(eNode.x * 2, eNode.z, this.noseR, this.toolType, endParam)
-
             // 凹弧出口補正を後続の全セグメントに伝播（Zベースラインシフト）
             if (concaveExitOffset !== 0) {
                 startO = { ox: startO.ox, oz: round3(startO.oz + concaveExitOffset) }
@@ -396,10 +397,10 @@ export class CenterTrackCalculator {
         // 幾何学的交点: dist = R / cos(α/2)
         // 2本のオフセット線の交点は、二等分線方向にR/cos(α/2)の距離
         // 注: R×tan(α/2)はライン沿いの接線点距離であり、二等分線沿いの交点距離ではない
-        // Spike Guard: 180度反転等での発散防止（cos→0で1/cos→∞を防ぐ）
-        const dist = (dot >= 0)
-            ? this.noseR / Math.max(0.01, cosHalf)  // 凸コーナー: オフセット線交点
-            : this.noseR                              // S字/凹コーナー: 単純オフセット
+        // Spike Guard: 極端な発散防止。2Rキャップで鈍角コーナーも交点距離を使用。
+        // 120°以下は完全交点、120°超は2Rにキャップ、180°近傍はcosHalf→0を防止。
+        const rawDist = this.noseR / Math.max(0.01, cosHalf)
+        const dist = Math.min(rawDist, this.noseR * 2.0)
 
         let bx = n1.nx + n2.nx, bz = n1.nz + n2.nz
         const len = Math.sqrt(bx * bx + bz * bz)
