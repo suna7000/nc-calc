@@ -7,13 +7,16 @@ import { defaultMachineSettings, type MachineSettings } from '../../models/setti
  * 6点形状: NCプログラム出力値との照合
  *
  * NCプログラム出力（実機値）との差異を記録。
- * 一部ポイントは完全一致、一部に残存誤差あり。
+ * ノード単位dz修正により角R系のdz不連続(0.4mm=noseR)は解消済み。
+ *
+ * 完全一致:
+ *   N15 Z, N25 R, N85 Z, N95 Z
  *
  * 残存誤差:
  *   角R0.5 endX: 0.079mm
- *   隅R1 endZ: 0.674mm（テーパー角度依存の補正差異）
+ *   角R0.5 endZ: 0.040mm
+ *   隅R1 endZ: 0.674mm（shape.tsのコーナー弧ジオメトリに起因）
  *   隅R2 endZ: 0.137mm
- *   角R2 endZ: 0.400mm = noseR（dz系統誤差）
  */
 describe('NCプログラム出力との照合（6点形状）', () => {
     const settings: MachineSettings = {
@@ -61,33 +64,32 @@ describe('NCプログラム出力との照合（6点形状）', () => {
     it('NCプログラム出力との差異記録', () => {
         const result = calculateShape(shape, settings)
 
-        // 一致するポイント
+        // === 完全一致するポイント ===
         const seg1 = result.segments[0]
         expect(seg1.compensated?.endZ).toBeCloseTo(nc.n15.z, 2) // N15 Z ✓
 
         const kakuR05 = result.segments.find(s => s.type === 'corner-r' && s.isConvex && s.radius === 0.5)
         expect(kakuR05?.compensated?.radius).toBeCloseTo(nc.n25.r, 2) // N25 R ✓
 
+        // 角R2 endZ: ノード単位dz修正により完全一致 ✓
+        const kakuR2 = result.segments.filter(s => s.type === 'corner-r' && s.isConvex).find(s => s.radius === 2)
+        expect(kakuR2?.compensated?.endZ).toBeCloseTo(nc.n85.z, 2) // N85 Z ✓
+
         const last = result.segments[result.segments.length - 1]
         expect(last.compensated?.endZ).toBeCloseTo(nc.n95.z, 2) // N95 Z ✓
 
-        // 残存誤差のあるポイント（1mm精度で記録）
-        // 角R0.5 endX: コード65.552 vs NC65.473（差0.079mm）← 要調査
+        // === 残存誤差のあるポイント ===
+        // 角R0.5 endX: コード65.552 vs NC65.473（差0.079mm）
         expect(kakuR05?.compensated?.endX).toBeCloseTo(nc.n25.x, 0)
         // 角R0.5 endZ: コード-115.789 vs NC-115.829（差0.040mm）
         expect(kakuR05?.compensated?.endZ).toBeCloseTo(nc.n25.z, 1)
 
-        // 隅R2 endZ: コード-169.670 vs NC-169.533（差0.137mm）← 要調査
+        // 隅R2 endZ: コード-169.670 vs NC-169.533（差0.137mm）
         const sumiR2 = result.segments.find(s => s.type === 'corner-r' && !s.isConvex && s.radius === 2)
         expect(sumiR2?.compensated?.endZ).toBeCloseTo(nc.n65.z, 0)
 
-        // 角R2 endZ: コード-184.230 vs NC-184.630（差0.400mm = noseR）← 要調査
-        const kakuR2 = result.segments.filter(s => s.type === 'corner-r' && s.isConvex).find(s => s.radius === 2)
-        expect(kakuR2?.compensated?.endZ).toBeCloseTo(nc.n85.z, 0)
-
-        // 隅R1 endZ: コード-117.988 vs NC-117.314（差0.674mm）← 最大誤差、要調査
+        // 隅R1 endZ: コード-117.988 vs NC-117.314（差0.674mm）← shape.ts弧ジオメトリに起因
         const sumiR1 = result.segments.find(s => s.type === 'corner-r' && !s.isConvex && s.radius === 1)
-        // 0.674mm > 0.5mm なので toBeCloseTo(x, 0) も不合格。現在値を記録。
         expect(sumiR1?.compensated?.endZ).toBeCloseTo(-117.988, 2)
     })
 })

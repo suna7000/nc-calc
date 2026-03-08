@@ -53,18 +53,18 @@ describe('統合検証: shape + noseRCompensation', () => {
                 console.log(`  中心: X${arc.compensated.centerX} Z${arc.compensated.centerZ}`)
                 console.log(`  半径: ${arc.compensated.radius}mm`)
 
-                // 手書き期待値との比較
-                const expectedStartZ = -114.793 // calculateCornerで計算される値
-                const handwrittenStartZ = -114.827 // 手書きメモの期待値
+                // NCプログラム出力値との比較（N15: Z-115.193）
+                // 凸弧始点のdzをノード単位で一貫させた結果、Z-line終点と同一座標になる
+                const ncStartZ = -115.193
 
                 console.log('\n【比較】')
                 console.log(`  プロファイルZ: ${arc.startZ}`)
                 console.log(`  補正後Z: ${arc.compensated.startZ}`)
-                console.log(`  手書き期待値: ${handwrittenStartZ}`)
-                console.log(`  誤差: ${(arc.compensated.startZ - handwrittenStartZ).toFixed(3)}mm`)
+                console.log(`  NCプログラム値: ${ncStartZ}`)
+                console.log(`  誤差: ${(arc.compensated.startZ - ncStartZ).toFixed(3)}mm`)
 
                 // ±0.05mm以内なら許容
-                const error = Math.abs(arc.compensated.startZ - handwrittenStartZ)
+                const error = Math.abs(arc.compensated.startZ - ncStartZ)
                 expect(error).toBeLessThan(0.05)
             }
         }
@@ -106,13 +106,14 @@ describe('統合検証: shape + noseRCompensation', () => {
         const arcConditional = resultConditional.segments.find(s => s.type === 'corner-r' && s.isConvex)
 
         if (arcConditional?.compensated) {
-            console.log('\n【現在の実装（条件付きdz）】')
+            console.log('\n【現在の実装（ノード単位dz）】')
             console.log(`  補正後始点Z: ${arcConditional.compensated.startZ}`)
             console.log(`  補正後終点Z: ${arcConditional.compensated.endZ}`)
 
-            const handwrittenStartZ = -114.827
-            const error = Math.abs(arcConditional.compensated.startZ - handwrittenStartZ)
-            console.log(`  手書き値との誤差: ${error.toFixed(3)}mm`)
+            // NCプログラム値 N15: Z-115.193（Z-line終点と一致すべき）
+            const ncStartZ = -115.193
+            const error = Math.abs(arcConditional.compensated.startZ - ncStartZ)
+            console.log(`  NCプログラム値との誤差: ${error.toFixed(3)}mm`)
 
             // 検証: ±0.05mm以内
             expect(error).toBeLessThan(0.05)

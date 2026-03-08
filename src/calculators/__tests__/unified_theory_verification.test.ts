@@ -250,12 +250,10 @@ describe('接線連続ノードでの挙動テスト', () => {
         // X方向は一致する
         expect(seg0end.x).toBeCloseTo(seg1start.x, 3)
 
-        // Z方向には ΔZ = noseR の不連続が発生する
-        // 原因: 同一ノードのP座標から pToO で異なる dz が適用される
-        //   - seg0(line): isConvex=false → dz=noseR=0.4
-        //   - seg1(corner-r, convex): isConvex=true → dz=0
+        // 修正後: ノード単位でdzを決定するため、Z方向の不連続は解消済み。
+        // 同一ノードで一貫したdz（=noseR）が適用される。
         const dz = Math.abs(seg0end.z - seg1start.z)
-        expect(dz).toBeCloseTo(R, 3)  // ΔZ = noseR = 0.4
+        expect(dz).toBeCloseTo(0, 3)  // 不連続なし ✓
     })
 
     it('接線連続ノードで bisector dist ≈ 0 になることの確認', () => {

@@ -292,6 +292,19 @@ export class CenterTrackCalculator {
             }
         }
 
+        // ノード単位のisConvex判定: 共有ノードで隣接セグメントが不一致にならないよう、
+        // 両隣のセグメントが共に凸弧の場合のみisConvex=true（dz=0）。
+        // 片方でも直線/凹弧の場合はisConvex=false（dz=noseR）で一貫。
+        const nodeIsConvex: boolean[] = []
+        for (let i = 0; i <= profile.length; i++) {
+            const prevSeg = i > 0 ? profile[i - 1] : null
+            const nextSeg = i < profile.length ? profile[i] : null
+            const prevIsConvex = prevSeg !== null && prevSeg.type === 'corner-r' && prevSeg.isConvex !== false
+            const nextIsConvex = nextSeg !== null && nextSeg.type === 'corner-r' && nextSeg.isConvex !== false
+            // 端点: 片方がnull → false (dz=noseR)
+            nodeIsConvex.push(prevIsConvex && nextIsConvex)
+        }
+
         const result: CompensatedSegment[] = []
         // 凹弧出口補正の伝播: 凹弧終点でdz反転が発生した場合、
         // 後続の直線セグメント（isConvex=false, bz≈0）にも同じ補正を伝播。
@@ -302,28 +315,22 @@ export class CenterTrackCalculator {
             const seg = profile[i]
             const sNode = nodes[i], eNode = nodes[i + 1]
 
-            // Z offset logic for bisector method:
-            // - Convex arcs (角R): bisector handles it perfectly, no additional Z offset (isConvex=true → dz=0)
-            // - Concave arcs (隅R): need additional Z offset (isConvex=false → dz=noseR)
-            // - Lines: also need additional Z offset (isConvex=false → dz=noseR)
-
-            // Only convex arcs should have isConvex=true (no Z offset)
-            // Everything else (concave arcs and lines) should have isConvex=false (apply Z offset)
-            const startIsConvex = (seg.type === 'corner-r' && seg.isConvex !== false)
-            const endIsConvex = (seg.type === 'corner-r' && seg.isConvex !== false)
+            // Z offset logic: ノード単位で一貫したdzを使用。
+            // nodeIsConvex[i]=true → dz=0（凸弧同士のノード）
+            // nodeIsConvex[i]=false → dz=noseR（直線/凹弧を含むノード）
 
             // フラグで切り替え: USE_BZ_BASED_DZ = true なら bisec + isConvex を渡す
             // テーパー公式使用ノードの場合は強制的にdz=0
             const startParam = sNode.usedTaperFormula
                 ? true  // テーパー公式使用時はisConvex=trueでdz=0
                 : (USE_BZ_BASED_DZ && sNode.bisec)
-                    ? { bisec: sNode.bisec, isConvex: startIsConvex }
-                    : startIsConvex
+                    ? { bisec: sNode.bisec, isConvex: nodeIsConvex[i] }
+                    : nodeIsConvex[i]
             const endParam = eNode.usedTaperFormula
                 ? true  // テーパー公式使用時はisConvex=trueでdz=0
                 : (USE_BZ_BASED_DZ && eNode.bisec)
-                    ? { bisec: eNode.bisec, isConvex: endIsConvex }
-                    : endIsConvex
+                    ? { bisec: eNode.bisec, isConvex: nodeIsConvex[i + 1] }
+                    : nodeIsConvex[i + 1]
 
             let startO = pToO(sNode.x * 2, sNode.z, this.noseR, this.toolType, startParam)
             let endO = pToO(eNode.x * 2, eNode.z, this.noseR, this.toolType, endParam)
@@ -370,7 +377,9 @@ export class CenterTrackCalculator {
                         ? round3(centerO.oz + 2 * this.noseR * sign2)
                         : centerO.oz
                 } else {
-                    const centerProg = pToO(seg.centerX, seg.centerZ, this.noseR, this.toolType, isConvex)
+                    // 凸弧中心もノード単位のdz判定を使用（端点と一貫したV_offset変換）
+                    const centerConvex = nodeIsConvex[i] && nodeIsConvex[i + 1]
+                    const centerProg = pToO(seg.centerX, seg.centerZ, this.noseR, this.toolType, centerConvex)
                     cCX = centerProg.ox
                     cCZ = centerProg.oz
                 }
