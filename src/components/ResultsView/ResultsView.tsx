@@ -24,6 +24,7 @@ export function ResultsView({
     const [hoveredPoint, setHoveredPoint] = useState<number | null>(null)
     const [isDragging, setIsDragging] = useState(false)
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+    const lastPinchDist = useRef<number | null>(null)
     const svgRef = useRef<SVGSVGElement>(null)
 
     const width = 500
@@ -139,6 +140,40 @@ export function ResultsView({
         setIsDragging(false)
     }, [])
 
+    // Touch: pan (1 finger) + pinch zoom (2 fingers)
+    const handleTouchStart = useCallback((e: React.TouchEvent) => {
+        if (e.touches.length === 1) {
+            setIsDragging(true)
+            setDragStart({ x: e.touches[0].clientX - pan.x, y: e.touches[0].clientY - pan.y })
+        } else if (e.touches.length === 2) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX
+            const dy = e.touches[0].clientY - e.touches[1].clientY
+            lastPinchDist.current = Math.hypot(dx, dy)
+        }
+    }, [pan])
+
+    const handleTouchMove = useCallback((e: React.TouchEvent) => {
+        e.preventDefault()
+        if (e.touches.length === 1 && isDragging) {
+            setPan({
+                x: e.touches[0].clientX - dragStart.x,
+                y: e.touches[0].clientY - dragStart.y
+            })
+        } else if (e.touches.length === 2 && lastPinchDist.current !== null) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX
+            const dy = e.touches[0].clientY - e.touches[1].clientY
+            const dist = Math.hypot(dx, dy)
+            const scale = dist / lastPinchDist.current
+            setZoom(prev => Math.min(Math.max(prev * scale, 0.5), 5))
+            lastPinchDist.current = dist
+        }
+    }, [isDragging, dragStart])
+
+    const handleTouchEnd = useCallback(() => {
+        setIsDragging(false)
+        lastPinchDist.current = null
+    }, [])
+
     const resetView = () => {
         setZoom(1)
         setPan({ x: 0, y: 0 })
@@ -201,7 +236,9 @@ export function ResultsView({
                 <span className="zoom-level">{Math.round(zoom * 100)}%</span>
                 <button onClick={() => setZoom(z => Math.max(z * 0.8, 0.5))} title="縮小">－</button>
                 <button onClick={resetView} title="リセット">⟲</button>
-                <span className="zoom-hint">ホイールでズーム、ドラッグで移動</span>
+                <span className="zoom-hint">
+                    {'ontouchstart' in window ? 'ピンチでズーム、スワイプで移動' : 'ホイールでズーム、ドラッグで移動'}
+                </span>
             </div>
 
             {/* インタラクティブCADビュー */}
@@ -212,6 +249,9 @@ export function ResultsView({
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
             >
                 <svg
                     ref={svgRef}
@@ -231,7 +271,8 @@ export function ResultsView({
                         </pattern>
                     </defs>
 
-                    <rect width={width} height={height} fill="#0a1929" rx="8" />
+                    <rect width={width} height={height} fill="#0a1929" rx="8"
+                        onClick={() => setHoveredPoint(null)} />
                     <rect width={width} height={height} fill="url(#grid-sm)" />
                     <rect width={width} height={height} fill="url(#grid-lg)" />
 
@@ -296,12 +337,16 @@ export function ResultsView({
                         )
                     })}
 
-                    {/* ポイントマーカー（番号のみ、ホバーで詳細表示） */}
+                    {/* ポイントマーカー（ホバーまたはタップで詳細表示） */}
                     {allPoints.map((pt, idx) => (
                         <g
                             key={`pt-${idx}`}
                             onMouseEnter={() => setHoveredPoint(idx)}
                             onMouseLeave={() => setHoveredPoint(null)}
+                            onClick={(e) => {
+                                e.stopPropagation()
+                                setHoveredPoint(prev => prev === idx ? null : idx)
+                            }}
                             style={{ cursor: 'pointer' }}
                         >
                             {/* 外側リング */}

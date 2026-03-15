@@ -347,3 +347,21 @@
     color: #2dd4bf;
     font-family: var(--font-mono);
 }
+
+/* ===== Mobile ===== */
+@media (max-width: 768px) {
+    .zoom-controls button {
+        width: 40px;
+        height: 40px;
+        font-size: var(--font-size-lg);
+    }
+
+    .zoom-hint {
+        display: none;
+    }
+
+    .coord-table .advanced-info-cell,
+    .coord-table th.advanced {
+        display: none;
+    }
+}
