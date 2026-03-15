@@ -5,6 +5,16 @@ import type { MachineSettings, CoordinateSettings } from '../../models/settings'
 import { defaultMachineSettings, defaultCoordinateSettings } from '../../models/settings'
 import './ResultsView.css'
 
+/** "きれいな" グリッド間隔を計算 (mm単位) */
+function niceGridStep(pxPerMm: number, minPixelGap: number = 40): number {
+    const niceSteps = [0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500]
+    const targetMm = minPixelGap / pxPerMm
+    for (const step of niceSteps) {
+        if (step >= targetMm) return step
+    }
+    return niceSteps[niceSteps.length - 1]
+}
+
 interface ResultsViewProps {
     shape: Shape
     onCopy: () => void
@@ -46,30 +56,50 @@ export function ResultsView({
         allCoords.push({ x: endX, z: endZ })
     })
 
-    const xValues = allCoords.map(p => p.x / 2)
-    const zValues = allCoords.map(p => p.z)
+    const xValues = allCoords.map(p => p.x / 2)  // 半径 (mm)
+    const zValues = allCoords.map(p => p.z)       // 軸方向 (mm)
 
-    const minX = Math.min(...xValues) - 5
-    const maxX = Math.max(...xValues) + 5
-    const minZ = Math.min(...zValues) - 5
-    const maxZ = Math.max(...zValues) + 5
+    // データ範囲 (mm)
+    const dataMinX = Math.min(...xValues)
+    const dataMaxX = Math.max(...xValues)
+    const dataMinZ = Math.min(...zValues)
+    const dataMaxZ = Math.max(...zValues)
 
-    // 座標変換関数（軸方向設定を反映）
-    const toSvgX = (z: number) => {
-        const range = maxZ - minZ || 1
-        const normalized = (z - minZ) / range
-        // Z方向: zDirection=1なら右が+、-1なら左が+
-        const adjusted = coordSettings.zDirection === 1 ? normalized : 1 - normalized
-        return padding + adjusted * (width - padding * 2)
-    }
+    // マージン: 範囲の10%または最低2mm
+    const rawXRange = dataMaxX - dataMinX || 1
+    const rawZRange = dataMaxZ - dataMinZ || 1
+    const marginX = Math.max(rawXRange * 0.1, 2)
+    const marginZ = Math.max(rawZRange * 0.1, 2)
 
-    const toSvgY = (x: number) => {
-        const range = maxX - minX || 1
-        const normalized = (x - minX) / range
-        // X方向: xDirection=1なら上が+、-1なら下が+
-        const adjusted = coordSettings.xDirection === 1 ? normalized : 1 - normalized
-        return height - padding - adjusted * (height - padding * 2)
-    }
+    const minX = dataMinX - marginX
+    const maxX = dataMaxX + marginX
+    const minZ = dataMinZ - marginZ
+    const maxZ = dataMaxZ + marginZ
+
+    const xRange = maxX - minX
+    const zRange = maxZ - minZ
+
+    // 描画領域のサイズ (SVGピクセル)
+    const drawWidth = width - padding * 2    // 400
+    const drawHeight = height - padding * 2  // 280
+
+    // 統一スケール (px/mm) — 両軸で同一
+    const uniScale = Math.min(drawWidth / zRange, drawHeight / xRange)
+
+    // 形状の中心 (mm)
+    const centerZ = (minZ + maxZ) / 2
+    const centerX = (minX + maxX) / 2
+
+    // SVGの中心 (px)
+    const svgCenterX = width / 2
+    const svgCenterY = height / 2
+
+    // 座標変換関数（等縮尺、軸方向設定を反映）
+    const toSvgX = (z: number) =>
+        svgCenterX + (z - centerZ) * uniScale * coordSettings.zDirection
+
+    const toSvgY = (x: number) =>
+        svgCenterY - (x - centerX) * uniScale * coordSettings.xDirection
 
     const colors = {
         line: '#3b82f6',
@@ -277,29 +307,116 @@ export function ResultsView({
                     }}
                 >
                     <defs>
-                        <pattern id="grid-sm" width="10" height="10" patternUnits="userSpaceOnUse">
-                            <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#1a3550" strokeWidth="0.3" />
-                        </pattern>
-                        <pattern id="grid-lg" width="50" height="50" patternUnits="userSpaceOnUse">
-                            <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#234567" strokeWidth="0.7" />
-                        </pattern>
+                        <clipPath id="drawArea">
+                            <rect x={padding} y={padding} width={drawWidth} height={drawHeight} />
+                        </clipPath>
                     </defs>
 
+                    {/* 背景 */}
                     <rect width={width} height={height} fill="#0a1929" rx="8"
                         onClick={() => setHoveredPoint(null)} />
-                    <rect width={width} height={height} fill="url(#grid-sm)" />
-                    <rect width={width} height={height} fill="url(#grid-lg)" />
 
-                    {/* 座標軸 */}
+                    {/* 実寸グリッド (mm) */}
+                    {(() => {
+                        const gridStep = niceGridStep(uniScale)
+                        const majorStep = gridStep * 5
+                        const gridLines: React.ReactElement[] = []
+                        const gridLabels: React.ReactElement[] = []
+
+                        // 描画領域の実座標範囲
+                        const halfVisZ = drawWidth / (2 * uniScale)
+                        const halfVisX = drawHeight / (2 * uniScale)
+                        const visMinZ = centerZ - halfVisZ
+                        const visMaxZ = centerZ + halfVisZ
+                        const visMinX = centerX - halfVisX
+                        const visMaxX = centerX + halfVisX
+
+                        // 小目盛り (Z方向: 縦線)
+                        const startZ = Math.floor(visMinZ / gridStep) * gridStep
+                        for (let z = startZ; z <= visMaxZ + gridStep; z += gridStep) {
+                            const sx = toSvgX(z)
+                            gridLines.push(
+                                <line key={`gz-${z.toFixed(4)}`}
+                                    x1={sx} y1={padding} x2={sx} y2={height - padding}
+                                    stroke="#1a3550" strokeWidth="0.3" />
+                            )
+                        }
+
+                        // 小目盛り (X方向: 横線)
+                        const startX = Math.floor(visMinX / gridStep) * gridStep
+                        for (let x = startX; x <= visMaxX + gridStep; x += gridStep) {
+                            const sy = toSvgY(x)
+                            gridLines.push(
+                                <line key={`gx-${x.toFixed(4)}`}
+                                    x1={padding} y1={sy} x2={width - padding} y2={sy}
+                                    stroke="#1a3550" strokeWidth="0.3" />
+                            )
+                        }
+
+                        // 大目盛り (Z方向: 縦線 + ラベル)
+                        const majorStartZ = Math.floor(visMinZ / majorStep) * majorStep
+                        for (let z = majorStartZ; z <= visMaxZ + majorStep; z += majorStep) {
+                            const sx = toSvgX(z)
+                            gridLines.push(
+                                <line key={`mgz-${z.toFixed(4)}`}
+                                    x1={sx} y1={padding} x2={sx} y2={height - padding}
+                                    stroke="#234567" strokeWidth="0.7" />
+                            )
+                            gridLabels.push(
+                                <text key={`lz-${z.toFixed(4)}`}
+                                    x={sx} y={height - padding + 14}
+                                    textAnchor="middle" fill="#4b5563" fontSize="9"
+                                    fontFamily="monospace">
+                                    {gridStep < 1 ? z.toFixed(1) : Math.round(z).toString()}
+                                </text>
+                            )
+                        }
+
+                        // 大目盛り (X方向: 横線 + ラベル、直径表示)
+                        const majorStartX = Math.floor(visMinX / majorStep) * majorStep
+                        for (let x = majorStartX; x <= visMaxX + majorStep; x += majorStep) {
+                            const sy = toSvgY(x)
+                            const diameterVal = x * 2
+                            gridLines.push(
+                                <line key={`mgx-${x.toFixed(4)}`}
+                                    x1={padding} y1={sy} x2={width - padding} y2={sy}
+                                    stroke="#234567" strokeWidth="0.7" />
+                            )
+                            gridLabels.push(
+                                <text key={`lx-${x.toFixed(4)}`}
+                                    x={padding - 4} y={sy + 3}
+                                    textAnchor="end" fill="#4b5563" fontSize="9"
+                                    fontFamily="monospace">
+                                    {gridStep < 1 ? diameterVal.toFixed(1) : Math.round(diameterVal).toString()}
+                                </text>
+                            )
+                        }
+
+                        return (
+                            <>
+                                <g clipPath="url(#drawArea)">{gridLines}</g>
+                                {gridLabels}
+                            </>
+                        )
+                    })()}
+
+                    {/* 描画領域の枠線と軸ラベル */}
                     <g className="axis">
-                        <line x1={padding - 15} y1={height - padding + 20}
-                            x2={width - padding + 20} y2={height - padding + 20}
+                        <line x1={padding} y1={height - padding}
+                            x2={width - padding} y2={height - padding}
                             stroke="#4b5563" strokeWidth="1" />
-                        <line x1={padding - 20} y1={height - padding + 15}
-                            x2={padding - 20} y2={padding - 15}
+                        <line x1={padding} y1={height - padding}
+                            x2={padding} y2={padding}
                             stroke="#4b5563" strokeWidth="1" />
-                        <text x={width - padding + 30} y={height - padding + 25} fill="#64748b" fontSize="12">Z</text>
-                        <text x={padding - 30} y={padding - 20} fill="#64748b" fontSize="12">X</text>
+                        <text x={width / 2} y={height - padding + 28}
+                            textAnchor="middle" fill="#64748b" fontSize="11">
+                            Z (mm)
+                        </text>
+                        <text x={padding - 30} y={height / 2}
+                            textAnchor="middle" fill="#64748b" fontSize="11"
+                            transform={`rotate(-90, ${padding - 30}, ${height / 2})`}>
+                            X (mm)
+                        </text>
                     </g>
 
                     {/* セグメント描画 */}
@@ -321,23 +438,15 @@ export function ResultsView({
                                 : colors.line
 
                         if (seg.type === 'corner-r' && radius) {
-                            // SVGの円弧コマンドでR部を描画
-                            // SVGのA(arc)コマンド: A rx ry x-axis-rotation large-arc-flag sweep-flag x y
-
-                            // 半径をSVG座標に変換
-                            const zRange = maxZ - minZ || 1
-                            const xRange = maxX - minX || 1
-                            const svgRadiusX = (radius / zRange) * (width - padding * 2)
-                            const svgRadiusY = (radius / xRange) * (height - padding * 2)
+                            // 等縮尺: 半径を統一スケールで変換（正円）
+                            const svgRadius = radius * uniScale
 
                             // sweep-flag: 描写用の幾何学的な回転方向を使用
-                            // SegmentResult.sweep は 0 (CCW) か 1 (CW)
-                            // SVGでは sweep=1 が時計回り
                             const sweepFlag = seg.sweep !== undefined ? seg.sweep : (seg.gCode === 'G02' ? 1 : 0)
 
                             return (
                                 <path key={`seg-${i}`}
-                                    d={`M ${x1} ${y1} A ${svgRadiusX} ${svgRadiusY} 0 0 ${sweepFlag} ${x2} ${y2}`}
+                                    d={`M ${x1} ${y1} A ${svgRadius} ${svgRadius} 0 0 ${sweepFlag} ${x2} ${y2}`}
                                     fill="none" stroke={color} strokeWidth="3" strokeLinecap="round"
                                 />
                             )
