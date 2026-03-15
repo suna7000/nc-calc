@@ -299,53 +299,21 @@
     line-height: 1.4;
 }
 
-/* ===== Compensated Cells ===== */
-.coord-table th.compensated {
-    color: #a78bfa;
-}
-
-.coord-table td.compensated {
-    color: #c084fc;
-    font-weight: 500;
-    background: rgba(167, 139, 250, 0.03);
-}
-
-/* Advanced Info (Smid) Styles */
-.coord-table th.advanced {
-    color: #f472b6;
-}
-
-.advanced-info-cell {
+/* ===== Point-based table ===== */
+.coord-table td.nc-ref {
+    color: var(--color-text-muted);
     font-size: var(--font-size-xs);
-    white-space: nowrap;
 }
 
-.smid-shifts {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 4px;
-    background: rgba(244, 114, 182, 0.05);
-    border-radius: var(--radius-sm);
-    border-left: 2px solid #f472b6;
+.orig-coord {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    opacity: 0.7;
 }
 
-.smid-shifts span {
-    color: #f472b6;
-    font-family: var(--font-mono);
-}
-
-.tangent-info {
-    padding: 4px;
-    background: rgba(45, 212, 191, 0.05);
-    border-radius: var(--radius-sm);
-    border-left: 2px solid #2dd4bf;
-    margin-top: 2px;
-}
-
-.tangent-info span {
-    color: #2dd4bf;
-    font-family: var(--font-mono);
+.type-badge.start {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
 }
 
 /* ===== Mobile ===== */
@@ -360,8 +328,4 @@
         display: none;
     }
 
-    .coord-table .advanced-info-cell,
-    .coord-table th.advanced {
-        display: none;
-    }
 }

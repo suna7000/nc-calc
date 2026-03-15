@@ -79,13 +79,17 @@ export function ResultsView({
         point: '#ef4444'
     }
 
-    // 全ポイントを収集
+    // 全ポイントを収集（CADビュー・座標テーブル共用）
     const allPoints: {
         x: number; z: number;
+        origX: number; origZ: number;
         svgX: number; svgY: number;
         label: string;
         color: string;
         index: number;
+        nLine: string;
+        gCode: string;
+        seg: SegmentResult | null;
     }[] = []
 
     result.segments.forEach((seg, i) => {
@@ -98,20 +102,30 @@ export function ResultsView({
         if (i === 0) {
             allPoints.push({
                 x: startX, z: startZ,
+                origX: seg.startX, origZ: seg.startZ,
                 svgX: toSvgX(startZ), svgY: toSvgY(startX / 2),
                 label: '始点',
                 color: colors.cornerR,
-                index: 1
+                index: 1,
+                nLine: 'N5',
+                gCode: machineSettings.noseRCompensation.enabled
+                    ? getCompensationGCode(machineSettings)
+                    : 'G01',
+                seg: null
             })
         }
         allPoints.push({
             x: endX, z: endZ,
+            origX: seg.endX, origZ: seg.endZ,
             svgX: toSvgX(endZ), svgY: toSvgY(endX / 2),
             label: seg.type === 'corner-r' ? 'R' : seg.type === 'corner-c' ? 'C' : '',
             color: seg.type === 'corner-r' ? colors.cornerR
                 : seg.type === 'corner-c' ? colors.cornerC
                     : colors.line,
-            index: i + 2
+            index: i + 2,
+            nLine: `N${(i + 1) * 10 + 5}`,
+            gCode: seg.gCode || (seg.type === 'corner-r' ? 'G03' : 'G01'),
+            seg
         })
     })
 
@@ -452,74 +466,65 @@ export function ResultsView({
                 </div>
             </div>
 
-            {/* 座標テーブル（詳細表示） */}
+            {/* 座標テーブル（ポイントベース表示） */}
             <div className="coord-table">
                 <table>
                     <thead>
                         <tr>
                             <th>No</th>
+                            <th>N</th>
                             <th>種類</th>
-                            {machineSettings.noseRCompensation.enabled ? (
-                                <>
-                                    <th className="compensated">プログラムX（始）</th>
-                                    <th className="compensated">プログラムZ（始）</th>
-                                    <th className="compensated">プログラムX（終）</th>
-                                    <th className="compensated">プログラムZ（終）</th>
-                                    <th className="compensated">I / K</th>
-                                </>
-                            ) : (
-                                <>
-                                    <th>X（始点）</th>
-                                    <th>Z（始点）</th>
-                                    <th>X（終点）</th>
-                                    <th>Z（終点）</th>
-                                    <th>I / K</th>
-                                </>
-                            )}
-                            <th className="advanced">設計(幾何)座標 / シフト量</th>
+                            <th>X</th>
+                            <th>Z</th>
+                            <th>R / I,K</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {result.segments.map((seg, i) => (
-                            <tr key={i} className={seg.type}>
-                                <td className="center">{i + 1}</td>
-                                <td>
-                                    <span className={`type-badge ${seg.type}`}>
-                                        {getTypeLabel(seg.type)}
-                                    </span>
-                                </td>
-                                {/* メインの座標列：補正が有効なら補正後を表示 */}
-                                <td className="mono highlight-comp">{(seg.compensated?.startX ?? seg.startX).toFixed(3)}</td>
-                                <td className="mono highlight-comp">{(seg.compensated?.startZ ?? seg.startZ).toFixed(3)}</td>
-                                <td className="mono highlight-comp">{(seg.compensated?.endX ?? seg.endX).toFixed(3)}</td>
-                                <td className="mono highlight-comp">{(seg.compensated?.endZ ?? seg.endZ).toFixed(3)}</td>
-                                <td className="mono">
-                                    {seg.compensated?.i !== undefined ? `I${seg.compensated.i.toFixed(3)} K${seg.compensated.k?.toFixed(3)}`
-                                        : (seg.i !== undefined ? `I${seg.i.toFixed(3)} K${seg.k?.toFixed(3)}` : '-')}
-                                </td>
+                        {allPoints.map((pt, idx) => {
+                            const seg = pt.seg
+                            const segType = seg?.type ?? 'start'
+                            const radius = seg ? (seg.compensated?.radius ?? seg.radius) : undefined
+                            const ik = seg
+                                ? (seg.compensated?.i !== undefined
+                                    ? `I${seg.compensated.i.toFixed(3)} K${seg.compensated.k?.toFixed(3)}`
+                                    : (seg.i !== undefined ? `I${seg.i.toFixed(3)} K${seg.k?.toFixed(3)}` : undefined))
+                                : undefined
+                            const hasCompensation = machineSettings.noseRCompensation.enabled
+                            const showOrig = hasCompensation && (
+                                Math.abs(pt.x - pt.origX) > 0.0005 || Math.abs(pt.z - pt.origZ) > 0.0005
+                            )
 
-                                <td className="advanced-info-cell">
-                                    <div className="geo-info">
-                                        <span className="label">設計:</span>
-                                        X{seg.startX.toFixed(3)} Z{seg.startZ.toFixed(3)} → X{seg.endX.toFixed(3)} Z{seg.endZ.toFixed(3)}
-                                    </div>
-                                    {machineSettings.noseRCompensation.enabled && (
-                                        <>
-                                            {seg.advancedInfo?.distToVertex !== undefined && (
-                                                <div className="vertex-info" title="仮想交点からの戻り量 (L)">
-                                                    <span>カド戻りL: {seg.advancedInfo.distToVertex.toFixed(3)}</span>
-                                                </div>
-                                            )}
-                                            {seg.advancedInfo?.tangentX !== undefined && (
-                                                <div className="tangent-info" title="理論接点座標">
-                                                    <span>接点: X{seg.advancedInfo.tangentX.toFixed(3)}</span>
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
+                            return (
+                                <tr key={idx} className={segType}>
+                                    <td className="center">{pt.index}</td>
+                                    <td className="mono nc-ref">{pt.nLine}</td>
+                                    <td>
+                                        <span className={`type-badge ${segType}`}>
+                                            {idx === 0 ? '始点' : getTypeLabel(segType)}
+                                        </span>
+                                    </td>
+                                    <td className="mono">
+                                        {pt.x.toFixed(3)}
+                                        {showOrig && (
+                                            <div className="orig-coord">元:{pt.origX.toFixed(3)}</div>
+                                        )}
+                                    </td>
+                                    <td className="mono">
+                                        {pt.z.toFixed(3)}
+                                        {showOrig && (
+                                            <div className="orig-coord">元:{pt.origZ.toFixed(3)}</div>
+                                        )}
+                                    </td>
+                                    <td className="mono">
+                                        {segType === 'corner-r' && radius !== undefined
+                                            ? (coordSettings.arcOutputMode === 'R'
+                                                ? `R${radius.toFixed(3)}`
+                                                : (ik ?? '-'))
+                                            : '-'}
+                                    </td>
+                                </tr>
+                            )
+                        })}
                     </tbody>
                 </table>
             </div>
