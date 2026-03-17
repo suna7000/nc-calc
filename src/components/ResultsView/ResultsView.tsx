@@ -441,8 +441,12 @@ export function ResultsView({
                             // 等縮尺: 半径を統一スケールで変換（正円）
                             const svgRadius = radius * uniScale
 
-                            // sweep-flag: 描写用の幾何学的な回転方向を使用
-                            const sweepFlag = seg.sweep !== undefined ? seg.sweep : (seg.gCode === 'G02' ? 1 : 0)
+                            // sweep-flag: 形状計算の幾何学的sweep → SVG座標系用に変換
+                            // SVG Y軸は下向き、かつ座標設定で軸反転がある場合、
+                            // 変換の行列式 = -zDir*xDir なので、zDir*xDir > 0 で向きが反転 → sweep反転
+                            const rawSweep = seg.sweep !== undefined ? seg.sweep : (seg.gCode === 'G02' ? 1 : 0)
+                            const flipSweep = coordSettings.zDirection * coordSettings.xDirection > 0
+                            const sweepFlag = flipSweep ? (1 - rawSweep) : rawSweep
 
                             return (
                                 <path key={`seg-${i}`}
