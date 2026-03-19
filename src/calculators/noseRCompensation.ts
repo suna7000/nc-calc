@@ -225,10 +225,12 @@ export class CenterTrackCalculator {
 
                 // テーパー公式使用フラグをセット
                 nodes.push({ x: px, z: pz, n, bisec: undefined, usedTaperFormula: true })
-            // 前セグメントが凸弧（角R）の場合、弧出口はテーパーと接線連続。
-            // bisector法（法線一致→単純オフセット）のほうがfz公式より正確。
-            } else if (isNextTaper && i > 0 && !(prevSeg!.type === 'corner-r' && prevSeg!.isConvex !== false)) {
-                // テーパー始点：fz公式 + 前セグメント法線でX計算
+            // テーパー始点: fz公式は直線→テーパー接続のみ適用。
+            // 凹弧(隅R)→テーパーは接線連続のため、bisector法(α=0→単純オフセット)が正確。
+            // fz公式はテーパー角θを使うが、接線連続ノードでは接合角=0なので不適切。
+            // (参照: IMG_1547-1550 検証、N55/N95 で 0.24-0.26mm の誤差)
+            } else if (isNextTaper && i > 0 && prevSeg!.type === 'line') {
+                // テーパー始点：fz公式 + 前セグメント法線でX計算（直線→テーパーのみ）
                 const taperAngle = nextSeg!.angle!
                 const taperAngleRad = taperAngle * Math.PI / 180
                 const halfAngleRad = taperAngleRad / 2

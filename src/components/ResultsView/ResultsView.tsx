@@ -83,8 +83,24 @@ export function ResultsView({
     const drawWidth = width - padding * 2    // 400
     const drawHeight = height - padding * 2  // 280
 
-    // 統一スケール (px/mm) — 両軸で同一
-    const uniScale = Math.min(drawWidth / zRange, drawHeight / xRange)
+    // 各軸の理想スケール (px/mm)
+    const idealScaleZ = drawWidth / zRange
+    const idealScaleX = drawHeight / xRange
+
+    // アスペクト比が極端な場合（典型的なNC旋盤形状: Z>>X）は非均等スケール
+    const MAX_ASPECT = 5
+    const scaleRatio = Math.max(idealScaleX / idealScaleZ, idealScaleZ / idealScaleX)
+    let scaleZ: number, scaleX: number
+    if (scaleRatio <= MAX_ASPECT) {
+        // 等縮尺: 両軸同一スケール（円弧が正円で表示）
+        const uniScale = Math.min(idealScaleZ, idealScaleX)
+        scaleZ = uniScale
+        scaleX = uniScale
+    } else {
+        // 非均等スケール: 各軸独立（形状が視認可能に）
+        scaleZ = idealScaleZ
+        scaleX = idealScaleX
+    }
 
     // 形状の中心 (mm)
     const centerZ = (minZ + maxZ) / 2
@@ -94,12 +110,12 @@ export function ResultsView({
     const svgCenterX = width / 2
     const svgCenterY = height / 2
 
-    // 座標変換関数（等縮尺、軸方向設定を反映）
+    // 座標変換関数（軸方向設定を反映）
     const toSvgX = (z: number) =>
-        svgCenterX + (z - centerZ) * uniScale * coordSettings.zDirection
+        svgCenterX + (z - centerZ) * scaleZ * coordSettings.zDirection
 
     const toSvgY = (x: number) =>
-        svgCenterY - (x - centerX) * uniScale * coordSettings.xDirection
+        svgCenterY - (x - centerX) * scaleX * coordSettings.xDirection
 
     const colors = {
         line: '#3b82f6',
@@ -318,22 +334,24 @@ export function ResultsView({
 
                     {/* 実寸グリッド (mm) */}
                     {(() => {
-                        const gridStep = niceGridStep(uniScale)
-                        const majorStep = gridStep * 5
+                        const gridStepZ = niceGridStep(scaleZ)
+                        const gridStepX = niceGridStep(scaleX)
+                        const majorStepZ = gridStepZ * 5
+                        const majorStepX = gridStepX * 5
                         const gridLines: React.ReactElement[] = []
                         const gridLabels: React.ReactElement[] = []
 
                         // 描画領域の実座標範囲
-                        const halfVisZ = drawWidth / (2 * uniScale)
-                        const halfVisX = drawHeight / (2 * uniScale)
+                        const halfVisZ = drawWidth / (2 * scaleZ)
+                        const halfVisX = drawHeight / (2 * scaleX)
                         const visMinZ = centerZ - halfVisZ
                         const visMaxZ = centerZ + halfVisZ
                         const visMinX = centerX - halfVisX
                         const visMaxX = centerX + halfVisX
 
                         // 小目盛り (Z方向: 縦線)
-                        const startZ = Math.floor(visMinZ / gridStep) * gridStep
-                        for (let z = startZ; z <= visMaxZ + gridStep; z += gridStep) {
+                        const startZ = Math.floor(visMinZ / gridStepZ) * gridStepZ
+                        for (let z = startZ; z <= visMaxZ + gridStepZ; z += gridStepZ) {
                             const sx = toSvgX(z)
                             gridLines.push(
                                 <line key={`gz-${z.toFixed(4)}`}
@@ -343,8 +361,8 @@ export function ResultsView({
                         }
 
                         // 小目盛り (X方向: 横線)
-                        const startX = Math.floor(visMinX / gridStep) * gridStep
-                        for (let x = startX; x <= visMaxX + gridStep; x += gridStep) {
+                        const startX = Math.floor(visMinX / gridStepX) * gridStepX
+                        for (let x = startX; x <= visMaxX + gridStepX; x += gridStepX) {
                             const sy = toSvgY(x)
                             gridLines.push(
                                 <line key={`gx-${x.toFixed(4)}`}
@@ -354,8 +372,8 @@ export function ResultsView({
                         }
 
                         // 大目盛り (Z方向: 縦線 + ラベル)
-                        const majorStartZ = Math.floor(visMinZ / majorStep) * majorStep
-                        for (let z = majorStartZ; z <= visMaxZ + majorStep; z += majorStep) {
+                        const majorStartZ = Math.floor(visMinZ / majorStepZ) * majorStepZ
+                        for (let z = majorStartZ; z <= visMaxZ + majorStepZ; z += majorStepZ) {
                             const sx = toSvgX(z)
                             gridLines.push(
                                 <line key={`mgz-${z.toFixed(4)}`}
@@ -367,14 +385,14 @@ export function ResultsView({
                                     x={sx} y={height - padding + 14}
                                     textAnchor="middle" fill="#4b5563" fontSize="9"
                                     fontFamily="monospace">
-                                    {gridStep < 1 ? z.toFixed(1) : Math.round(z).toString()}
+                                    {gridStepZ < 1 ? z.toFixed(1) : Math.round(z).toString()}
                                 </text>
                             )
                         }
 
                         // 大目盛り (X方向: 横線 + ラベル、直径表示)
-                        const majorStartX = Math.floor(visMinX / majorStep) * majorStep
-                        for (let x = majorStartX; x <= visMaxX + majorStep; x += majorStep) {
+                        const majorStartX = Math.floor(visMinX / majorStepX) * majorStepX
+                        for (let x = majorStartX; x <= visMaxX + majorStepX; x += majorStepX) {
                             const sy = toSvgY(x)
                             const diameterVal = x * 2
                             gridLines.push(
@@ -387,7 +405,7 @@ export function ResultsView({
                                     x={padding - 4} y={sy + 3}
                                     textAnchor="end" fill="#4b5563" fontSize="9"
                                     fontFamily="monospace">
-                                    {gridStep < 1 ? diameterVal.toFixed(1) : Math.round(diameterVal).toString()}
+                                    {gridStepX < 1 ? diameterVal.toFixed(1) : Math.round(diameterVal).toString()}
                                 </text>
                             )
                         }
@@ -438,8 +456,9 @@ export function ResultsView({
                                 : colors.line
 
                         if (seg.type === 'corner-r' && radius) {
-                            // 等縮尺: 半径を統一スケールで変換（正円）
-                            const svgRadius = radius * uniScale
+                            // 各軸スケールで半径をSVG座標に変換
+                            const svgRadiusX = radius * scaleZ
+                            const svgRadiusY = radius * scaleX
 
                             // sweep-flag: 形状計算の幾何学的sweep → SVG座標系用に変換
                             // SVG Y軸は下向き、かつ座標設定で軸反転がある場合、
@@ -450,7 +469,7 @@ export function ResultsView({
 
                             return (
                                 <path key={`seg-${i}`}
-                                    d={`M ${x1} ${y1} A ${svgRadius} ${svgRadius} 0 0 ${sweepFlag} ${x2} ${y2}`}
+                                    d={`M ${x1} ${y1} A ${svgRadiusX} ${svgRadiusY} 0 0 ${sweepFlag} ${x2} ${y2}`}
                                     fill="none" stroke={color} strokeWidth="3" strokeLinecap="round"
                                 />
                             )
